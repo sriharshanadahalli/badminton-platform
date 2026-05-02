@@ -1,0 +1,21 @@
+@import "tailwindcss";
+
+@theme {
+  --color-court-green: #1b8a53;
+  --color-court-lines: #ffffff;
+  --color-court-out: #1f2937;
+}
+
+html {
+  overflow-y: scroll !important;
+  scrollbar-gutter: stable;
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  background-color: #020617; 
+  color: white;
+  font-family: 'Outfit', ui-sans-serif, system-ui, sans-serif;
+}
+

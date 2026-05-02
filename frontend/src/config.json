@@ -1,0 +1,22 @@
+{
+  "TOURNAMENT_NAME": "HABYA 2026",
+  "BACKEND_URL": "http://192.168.50.29:4000",
+  "MOCKOON_URL": "http://192.168.50.29:3000",
+  "COURTS": [
+    "01",
+    "02",
+    "03",
+    "04",
+    "05",
+    "06",
+    "07",
+    "08",
+    "09",
+    "10"
+  ],
+  "DEFAULT_MATCH_PARAMS": {
+    "gamesPerMatch": 3,
+    "pointsPerGame": 21,
+    "goldenPointAt": 20
+  }
+}
