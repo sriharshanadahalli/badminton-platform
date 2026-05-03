@@ -11,13 +11,18 @@ const RoundRobinSetupModal = ({ isOpen, onClose, onGenerate }) => {
     const [searchTerm, setSearchTerm] = useState('');
     const [loading, setLoading] = useState(false);
     const [alert, setAlert] = useState({ open: false, message: '', title: '' });
+    const isFetched = React.useRef(false);
 
     useEffect(() => {
-        if (isOpen) {
+        if (isOpen && !isFetched.current) {
+            isFetched.current = true;
             fetchPlayers();
             setCategoryName('');
             setSelectedPlayers([]);
             setSearchTerm('');
+        }
+        if (!isOpen) {
+            isFetched.current = false;
         }
     }, [isOpen]);
 

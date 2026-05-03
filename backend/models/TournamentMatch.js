@@ -32,11 +32,8 @@ const TournamentMatchSchema = new mongoose.Schema({
   sourceMatch1Id: { type: mongoose.Schema.Types.ObjectId, ref: 'TournamentMatch', default: null },
   sourceMatch2Id: { type: mongoose.Schema.Types.ObjectId, ref: 'TournamentMatch', default: null },
 
-  matchResult: {
-    winner: { type: String, default: null }, // "1" or "2"
-    finalScore: { type: String, default: null },
-    totalDurationMins: { type: Number, default: 0 }
-  }
+  winner: { type: String, default: null } // "team1" or "team2"
+
 }, { timestamps: true });
 
 // Create indexes for fast retrieval of bracket structures

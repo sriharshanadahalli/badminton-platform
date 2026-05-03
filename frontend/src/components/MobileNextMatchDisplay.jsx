@@ -10,9 +10,8 @@ const MobileNextMatchDisplay = ({ matchConfig, courtId }) => {
     );
   }
 
-  const participants = matchConfig.players || matchConfig.participants || { team1: [], team2: [] };
-  const team1Names = participants.team1 || [];
-  const team2Names = participants.team2 || [];
+  const team1Names = matchConfig.teams?.team1?.players?.map(p => p.fullName) || [];
+  const team2Names = matchConfig.teams?.team2?.players?.map(p => p.fullName) || [];
 
   return (
     <div className="flex flex-col w-full bg-slate-900/40 border-t border-slate-700/20">

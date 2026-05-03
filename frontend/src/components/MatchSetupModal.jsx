@@ -7,23 +7,24 @@ const MatchSetupModal = () => {
   const { match, completeSetup, startMatch } = useMatch();
   
   const [step, setStep] = useState(1);
-  const [tossWinner, setTossWinner] = useState(null); // 1 or 2
+  const [tossWinner, setTossWinner] = useState(null); // 'team1' or 'team2'
   const [tossDecision, setTossDecision] = useState(null); // 'court' or 'serve'
-  const [teamOnLeft, setTeamOnLeft] = useState(null); // 1 or 2
-  const [servingTeam, setServingTeam] = useState(null); // 1 or 2
+  const [teamOnLeft, setTeamOnLeft] = useState(null); // 'team1' or 'team2'
+  const [servingTeam, setServingTeam] = useState(null); // 'team1' or 'team2'
   const [initialServer, setInitialServer] = useState(null); 
   const [initialReceiver, setInitialReceiver] = useState(null); 
   
   const isDoubles = (match.teams?.team1?.players?.length > 1) || (match.teams?.team2?.players?.length > 1);
 
   const getTeamName = (teamId, useFirstNamesOnly = true) => {
-    const team = teamId === 1 ? match.teams?.team1 : match.teams?.team2;
-    if (!team || !team.players) return `Team ${teamId}`;
+    const team = teamId === 'team1' ? match.teams?.team1 : match.teams?.team2;
+    if (!team || !team.players) return `Team ${teamId === 'team1' ? 1 : 2}`;
     return team.players.map(p => useFirstNamesOnly ? p.firstName : p.fullName).join(' / ');
   };
 
   const renderTeamName = (teamId, defaultName, useFirstNamesOnly = false) => {
-    const team = teamId === 1 ? match.teams?.team1 : match.teams?.team2;
+    const team = teamId === 'team1' ? match.teams?.team1 : match.teams?.team2;
+
     if (!team || !team.players || team.players.length === 0) {
         return <div className="text-xl font-semibold text-white truncate px-2">{defaultName}</div>;
     }
@@ -34,7 +35,8 @@ const MatchSetupModal = () => {
     ));
   };
   
-  const getTeamColorClass = (teamId) => teamId === 1 ? 'text-blue-400' : 'text-red-400';
+  const getTeamColorClass = (teamId) => teamId === 'team1' ? 'text-blue-400' : 'text-red-400';
+
 
   const onTossWinnerSelect = (t) => {
     setTossWinner(t);
@@ -46,7 +48,7 @@ const MatchSetupModal = () => {
     
     // Auto-resolve serving team based on implicit rules
     if (decision === 'court') {
-      const otherTeam = tossWinner === 1 ? 2 : 1;
+      const otherTeam = tossWinner === 'team1' ? 'team2' : 'team1';
       setServingTeam(otherTeam);
     } else if (decision === 'serve') {
       setServingTeam(tossWinner);
@@ -60,10 +62,10 @@ const MatchSetupModal = () => {
     
     if (!isDoubles) {
       // Auto-complete for singles
-      const server = servingTeam === 1 
+      const server = servingTeam === 'team1' 
         ? match.teams.team1.players[0]
         : match.teams.team2.players[0];
-      const receiver = servingTeam === 1
+      const receiver = servingTeam === 'team1'
         ? match.teams.team2.players[0]
         : match.teams.team1.players[0];
         
@@ -97,16 +99,16 @@ const MatchSetupModal = () => {
             <div className="flex gap-4">
               {/* Step 1: Show FULL names */}
               <button 
-                onClick={() => onTossWinnerSelect(1)}
+                onClick={() => onTossWinnerSelect('team1')}
                 className="flex-1 bg-blue-900/30 hover:bg-blue-600 border-2 border-blue-500/50 p-6 rounded-xl transition cursor-pointer flex flex-col items-center justify-center text-blue-100"
               >
-                {renderTeamName(1, 'Team 1', false)}
+                {renderTeamName('team1', 'Team 1', false)}
               </button>
               <button 
-                onClick={() => onTossWinnerSelect(2)}
+                onClick={() => onTossWinnerSelect('team2')}
                 className="flex-1 bg-red-900/30 hover:bg-red-600 border-2 border-red-500/50 p-6 rounded-xl transition cursor-pointer flex flex-col items-center justify-center text-red-100"
               >
-                {renderTeamName(2, 'Team 2', false)}
+                {renderTeamName('team2', 'Team 2', false)}
               </button>
             </div>
           </div>
@@ -137,7 +139,8 @@ const MatchSetupModal = () => {
         );
 
       case 3: {
-        const chooserTeam = tossDecision === 'court' ? tossWinner : (tossWinner === 1 ? 2 : 1);
+        const chooserTeam = tossDecision === 'court' ? tossWinner : (tossWinner === 'team1' ? 'team2' : 'team1');
+
         return (
           <div className="space-y-6">
             <h2 className="text-2xl font-bold text-center">
@@ -146,7 +149,7 @@ const MatchSetupModal = () => {
             <p className="text-gray-400 text-center text-sm">Which side of the court will they start on?</p>
             <div className="flex gap-4">
               <button onClick={() => onStep3Select(chooserTeam)} className="flex-1 bg-gray-800 hover:bg-emerald-600 border border-gray-700 p-6 rounded-xl transition text-white font-bold text-xl">Left Side</button>
-              <button onClick={() => onStep3Select(chooserTeam === 1 ? 2 : 1)} className="flex-1 bg-gray-800 hover:bg-emerald-600 border border-gray-700 p-6 rounded-xl transition text-white font-bold text-xl">Right Side</button>
+              <button onClick={() => onStep3Select(chooserTeam === 'team1' ? 'team2' : 'team1')} className="flex-1 bg-gray-800 hover:bg-emerald-600 border border-gray-700 p-6 rounded-xl transition text-white font-bold text-xl">Right Side</button>
             </div>
           </div>
         );
@@ -155,9 +158,9 @@ const MatchSetupModal = () => {
       case 4: {
         const team1 = match.teams?.team1?.players || [];
         const team2 = match.teams?.team2?.players || [];
-        const servingTeamPlayers = servingTeam === 1 ? team1 : team2;
-        const receivingTeamId = servingTeam === 1 ? 2 : 1;
-        const receivingTeamPlayers = receivingTeamId === 1 ? team1 : team2;
+        const servingTeamPlayers = servingTeam === 'team1' ? team1 : team2;
+        const receivingTeamId = servingTeam === 'team1' ? 'team2' : 'team1';
+        const receivingTeamPlayers = receivingTeamId === 'team1' ? team1 : team2;
 
         return (
           <div className="flex flex-col h-full space-y-2 md:space-y-4">
@@ -184,7 +187,7 @@ const MatchSetupModal = () => {
                       <button 
                         key={p.id}
                         onClick={() => setInitialServer(p)}
-                        className={`flex-1 flex items-center justify-center p-2 text-[10px] md:text-sm text-center leading-tight rounded-lg border transition-all font-bold ${initialServer?.id === p.id ? 'bg-emerald-600 border-emerald-400 text-white' : (servingTeam === 1 ? 'bg-blue-900/20 border-blue-500/30 text-blue-100' : 'bg-red-900/20 border-red-500/30 text-red-100')}`}
+                        className={`flex-1 flex items-center justify-center p-2 text-[10px] md:text-sm text-center leading-tight rounded-lg border transition-all font-bold ${initialServer?.id === p.id ? 'bg-emerald-600 border-emerald-400 text-white' : (servingTeam === 'team1' ? 'bg-blue-900/20 border-blue-500/30 text-blue-100' : 'bg-red-900/20 border-red-500/30 text-red-100')}`}
                       >
                         {p.firstName}
                       </button>
@@ -200,7 +203,7 @@ const MatchSetupModal = () => {
                       <button 
                         key={p.id}
                         onClick={() => setInitialReceiver(p)}
-                        className={`flex-1 flex items-center justify-center p-2 text-[10px] md:text-sm text-center leading-tight rounded-lg border transition-all font-bold ${initialReceiver?.id === p.id ? 'bg-emerald-600 border-emerald-400 text-white' : (receivingTeamId === 1 ? 'bg-blue-900/20 border-blue-500/30 text-blue-100' : 'bg-red-900/20 border-red-500/30 text-red-100')}`}
+                        className={`flex-1 flex items-center justify-center p-2 text-[10px] md:text-sm text-center leading-tight rounded-lg border transition-all font-bold ${initialReceiver?.id === p.id ? 'bg-emerald-600 border-emerald-400 text-white' : (receivingTeamId === 'team1' ? 'bg-blue-900/20 border-blue-500/30 text-blue-100' : 'bg-red-900/20 border-red-500/30 text-red-100')}`}
                       >
                         {p.firstName}
                       </button>

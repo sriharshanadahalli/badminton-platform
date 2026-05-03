@@ -22,10 +22,10 @@ const GameOverModal = () => {
   // The last game in history is the one that just finished
   const lastGame = gameHistory[gameHistory.length - 1];
   const winnerTeam = lastGame?.winner;
-  const lastGameWinnerName = winnerTeam === 1 ? (match.team1Name || 'Team 1') : (match.team2Name || 'Team 2');
+  const lastGameWinnerName = winnerTeam === 'team1' ? (match.teams?.team1?.players?.map(p => p.firstName).join(' / ') || 'Team 1') : (match.teams?.team2?.players?.map(p => p.firstName).join(' / ') || 'Team 2');
   
-  const matchWinnerId = gamesWon.team1 > gamesWon.team2 ? 1 : 2;
-  const matchWinnerName = matchWinnerId === 1 ? (match.team1Name || 'Team 1') : (match.team2Name || 'Team 2');  
+  const matchWinnerId = gamesWon.team1 > gamesWon.team2 ? 'team1' : 'team2';
+  const matchWinnerName = matchWinnerId === 'team1' ? (match.teams?.team1?.players?.map(p => p.firstName).join(' / ') || 'Team 1') : (match.teams?.team2?.players?.map(p => p.firstName).join(' / ') || 'Team 2');  
 
   const getFirstNames = (nameStr) => {
     if (!nameStr) return [];
@@ -33,8 +33,8 @@ const GameOverModal = () => {
   };
 
   const renderVerticalNames = (teamId) => {
-    const team = teamId === 1 ? match.teams?.team1 : match.teams?.team2;
-    const names = team?.players?.map(p => p.firstName) || (teamId === 1 ? ['Team 1'] : ['Team 2']);
+    const team = teamId === 'team1' ? match.teams?.team1 : match.teams?.team2;
+    const names = team?.players?.map(p => p.firstName) || (teamId === 'team1' ? ['Team 1'] : ['Team 2']);
     return (
       <div className="flex flex-col items-center">
         {names.map((name, idx) => (
@@ -71,8 +71,8 @@ const GameOverModal = () => {
       const setupData = {
         servingTeam: winId,
         activeServer: nextServer,
-        team1Pos: winId === 1 ? { evenSide: nextServer, oddSide: match.teams.team1.players.find(p => p.id !== nextServer.id) } : { evenSide: nextReceiver, oddSide: match.teams.team1.players.find(p => p.id !== nextReceiver.id) },
-        team2Pos: winId === 2 ? { evenSide: nextServer, oddSide: match.teams.team2.players.find(p => p.id !== nextServer.id) } : { evenSide: nextReceiver, oddSide: match.teams.team2.players.find(p => p.id !== nextReceiver.id) }
+        team1Pos: winId === 'team1' ? { evenSide: nextServer, oddSide: match.teams.team1.players.find(p => String(p.id) !== String(nextServer.id)) } : { evenSide: nextReceiver, oddSide: match.teams.team1.players.find(p => String(p.id) !== String(nextReceiver.id)) },
+        team2Pos: winId === 'team2' ? { evenSide: nextServer, oddSide: match.teams.team2.players.find(p => String(p.id) !== String(nextServer.id)) } : { evenSide: nextReceiver, oddSide: match.teams.team2.players.find(p => String(p.id) !== String(nextReceiver.id)) }
       };
       nextGame(setupData);
     } else {
@@ -127,21 +127,24 @@ const GameOverModal = () => {
               className="space-y-4"
             >
               <h2 className="text-sm md:text-2xl font-bold text-center leading-tight">Game Over</h2>
-              
               <div className="py-3 md:py-5 px-4 bg-gray-800/40 rounded-xl border border-gray-700/50">
-                <div className="flex items-center justify-center space-x-6 md:space-x-8">
+                <div className="flex items-center justify-center space-x-6 md:space-x-12">
+                   {/* Winner (Left) */}
                    <div className="flex flex-col items-center">
-                     <span className={`text-2xl md:text-3xl font-bold ${winnerTeam === 1 ? 'text-emerald-400' : 'text-gray-600'}`}>
-                       {lastGame.scores.team1}
+                     <span className="text-3xl md:text-5xl font-black mb-2 text-emerald-400">
+                       {winnerTeam === 'team1' ? lastGame.scores.team1 : lastGame.scores.team2}
                      </span>
-                     {renderVerticalNames(1)}
+                     {renderVerticalNames(winnerTeam === 'team1' ? 'team1' : 'team2')}
                    </div>
-                   <div className="text-gray-700 font-bold text-lg md:text-xl">VS</div>
-                   <div className="flex flex-col items-center">
-                     <span className={`text-2xl md:text-3xl font-bold ${winnerTeam === 2 ? 'text-emerald-400' : 'text-gray-600'}`}>
-                       {lastGame.scores.team2}
+                   
+                   <div className="text-gray-800 font-black text-xl md:text-2xl italic">VS</div>
+                   
+                   {/* Loser (Right) */}
+                   <div className="flex flex-col items-center opacity-40">
+                     <span className="text-3xl md:text-5xl font-black mb-2 text-gray-700">
+                       {winnerTeam === 'team1' ? lastGame.scores.team2 : lastGame.scores.team1}
                      </span>
-                     {renderVerticalNames(2)}
+                     {renderVerticalNames(winnerTeam === 'team1' ? 'team2' : 'team1')}
                    </div>
                 </div>
               </div>
@@ -172,12 +175,12 @@ const GameOverModal = () => {
                       <div key={idx} className="bg-gray-800/60 px-2.5 py-1.5 rounded-lg border border-gray-700/50 text-center shadow-inner min-w-[64px]">
                         <div className="text-[9px] text-gray-500 uppercase font-bold mb-0.5">Game {game.game}</div>
                         <div className="font-mono font-bold text-xs whitespace-nowrap">
-                          <span className={game.winner === matchWinnerId ? "text-emerald-400" : "text-gray-400"}>
-                            {matchWinnerId === 1 ? game.scores.team1 : game.scores.team2}
+                          <span className={game.winner === matchWinnerId ? "text-emerald-400 font-black" : "text-gray-500"}>
+                            {matchWinnerId === 'team1' ? game.scores.team1 : game.scores.team2}
                           </span>
-                          <span className="text-gray-500 mx-0.5">-</span>
-                          <span className={game.winner !== matchWinnerId ? "text-emerald-400" : "text-gray-400"}>
-                            {matchWinnerId === 1 ? game.scores.team2 : game.scores.team1}
+                          <span className="text-gray-700 mx-1">-</span>
+                          <span className={game.winner !== matchWinnerId ? "text-emerald-400 font-black" : "text-gray-500"}>
+                            {matchWinnerId === 'team1' ? game.scores.team2 : game.scores.team1}
                           </span>
                         </div>
                       </div>
@@ -207,13 +210,13 @@ const GameOverModal = () => {
               <div className="flex flex-col md:flex-row gap-3 text-left">
                 {/* Server Selection */}
                 <div className="flex-1 bg-gray-800/40 p-3 rounded-xl border border-gray-700/50">
-                  <h3 className={`text-[10px] ${winnerTeam === 1 ? 'text-blue-400' : 'text-red-400'} uppercase font-bold tracking-[0.2em] mb-3 text-center`}>Serving</h3>
+                  <h3 className={`text-[10px] ${winnerTeam === 'team1' ? 'text-blue-400' : 'text-red-400'} uppercase font-bold tracking-[0.2em] mb-3 text-center`}>Serving</h3>
                   <div className="flex flex-col gap-2">
-                    {(winnerTeam === 1 ? match.teams.team1.players : match.teams.team2.players).map(p => (
+                    {(winnerTeam === 'team1' ? match.teams.team1.players : match.teams.team2.players).map(p => (
                       <button 
                         key={p.id} 
                         onClick={() => setNextServer(p)}
-                        className={`py-2.5 px-2 rounded-lg border font-bold text-xs md:text-sm transition-all ${nextServer?.id === p.id ? 'bg-emerald-600 border-emerald-400 text-white shadow-lg' : (winnerTeam === 1 ? 'bg-blue-900/20 border-blue-500/30 text-blue-100' : 'bg-red-900/20 border-red-500/30 text-red-100')}`}
+                        className={`py-2.5 px-2 rounded-lg border font-bold text-xs md:text-sm transition-all ${nextServer?.id === p.id ? 'bg-emerald-600 border-emerald-400 text-white shadow-lg' : (winnerTeam === 'team1' ? 'bg-blue-900/20 border-blue-500/30 text-blue-100' : 'bg-red-900/20 border-red-500/30 text-red-100')}`}
                       >
                         {p.firstName}
                       </button>
@@ -223,13 +226,13 @@ const GameOverModal = () => {
 
                 {/* Receiver Selection */}
                 <div className="flex-1 bg-gray-800/40 p-3 rounded-xl border border-gray-700/50">
-                  <h3 className={`text-[10px] ${winnerTeam === 1 ? 'text-red-400' : 'text-blue-400'} uppercase font-bold tracking-[0.2em] mb-3 text-center`}>Receiving</h3>
+                  <h3 className={`text-[10px] ${winnerTeam === 'team1' ? 'text-red-400' : 'text-blue-400'} uppercase font-bold tracking-[0.2em] mb-3 text-center`}>Receiving</h3>
                   <div className="flex flex-col gap-2">
-                    {(winnerTeam === 1 ? match.teams.team2.players : match.teams.team1.players).map(p => (
+                    {(winnerTeam === 'team1' ? match.teams.team2.players : match.teams.team1.players).map(p => (
                       <button 
                         key={p.id} 
                         onClick={() => setNextReceiver(p)}
-                        className={`py-2.5 px-2 rounded-lg border font-bold text-xs md:text-sm transition-all ${nextReceiver?.id === p.id ? 'bg-emerald-600 border-emerald-400 text-white shadow-lg' : (winnerTeam === 1 ? 'bg-red-900/20 border-red-500/30 text-red-100' : 'bg-blue-900/20 border-blue-500/30 text-blue-100')}`}
+                        className={`py-2.5 px-2 rounded-lg border font-bold text-xs md:text-sm transition-all ${nextReceiver?.id === p.id ? 'bg-emerald-600 border-emerald-400 text-white shadow-lg' : (winnerTeam === 'team1' ? 'bg-red-900/20 border-red-500/30 text-red-100' : 'bg-blue-900/20 border-blue-500/30 text-blue-100')}`}
                       >
                         {p.firstName}
                       </button>

@@ -9,9 +9,11 @@ const WinConfirmationModal = () => {
   if (!pendingWinDetails) return null;
 
   const { team1Score, team2Score, winnerId, matchCompleted } = pendingWinDetails;
-  const isTeam1Winner = winnerId === 1;
+  const isTeam1Winner = winnerId === 'team1';
 
-  const winningTeamName = winnerId === 1 ? (match?.team1Name || 'Team 1') : (match?.team2Name || 'Team 2');
+  const winningTeamName = winnerId === 'team1' 
+    ? (match?.teams?.team1?.players?.map(p => p.firstName).join(' / ') || 'Team 1') 
+    : (match?.teams?.team2?.players?.map(p => p.firstName).join(' / ') || 'Team 2');
   const title = matchCompleted ? "Match Point Scored!" : "Game Point Scored!";
 
   return (
@@ -30,9 +32,9 @@ const WinConfirmationModal = () => {
         </p>
 
         <div className="w-full bg-gray-800/50 border border-gray-700/50 rounded-xl p-3 mb-6 flex justify-center items-center space-x-6 shadow-inner">
-           <span className={`text-2xl font-black ${isTeam1Winner ? 'text-emerald-400' : 'text-gray-600'}`}>{team1Score}</span>
-           <span className="text-gray-500 font-bold text-xs uppercase tracking-widest">Final Score</span>
-           <span className={`text-2xl font-black ${!isTeam1Winner ? 'text-emerald-400' : 'text-gray-600'}`}>{team2Score}</span>
+           <span className="text-emerald-400 font-black text-3xl">{isTeam1Winner ? team1Score : team2Score}</span>
+           <span className="text-gray-500 font-bold text-[10px] uppercase tracking-[0.2em] px-3">Final Score</span>
+           <span className="text-gray-600 font-black text-3xl">{isTeam1Winner ? team2Score : team1Score}</span>
         </div>
 
         <div className="flex flex-col md:flex-row space-y-3 md:space-y-0 md:space-x-4 w-full">

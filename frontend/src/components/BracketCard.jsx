@@ -108,7 +108,7 @@ const BracketCard = ({ match, onEdit, onUpdate, onForfeit, isHighlighted, setGlo
                     <div className="absolute -inset-14 rounded-[4rem] animate-[pulse_2s_ease-in-out_infinite] bg-blue-600/10 blur-3xl -z-20" />
                 </>
             )}
-            <div className="bg-slate-800/40 pl-3 pr-5 flex items-center justify-between border-b border-white/5 min-h-[56px] shrink-0">
+            <div className="bg-slate-800/40 pl-3 pr-5 flex items-center justify-between border-b border-white/5 min-h-[56px] shrink-0 rounded-t-[1.5rem]">
                 <div className="w-[140px] flex flex-col text-[8px] font-black text-slate-500 uppercase leading-tight tracking-wider">
                     <span>Games per Match: {match.gamesPerMatch || 3}</span>
                     <span>Points per Game: {match.pointsPerGame || 21}</span>
@@ -140,15 +140,15 @@ const BracketCard = ({ match, onEdit, onUpdate, onForfeit, isHighlighted, setGlo
                 </div>
             </div>
             <div className="flex-1 bg-slate-800/10 px-6 py-1 flex flex-col items-center text-center space-y-1.5 justify-center relative overflow-hidden">
-                <div className="">{renderPlayers(match.team1Name, match.matchResult?.winner === '1', match.matchResult?.winner === '2')}</div>
+                <div className="">{renderPlayers(match.teams?.team1?.players?.map(p => p.fullName).join(' / ') || 'TBD', match.winner === 'team1', match.winner === 'team2')}</div>
                 <div className="flex items-center space-x-4 w-full opacity-10">
                     <div className="h-[1px] flex-1 bg-gradient-to-r from-transparent to-slate-500" />
                     <span className="text-[8px] font-black text-slate-400 uppercase tracking-widest">vs</span>
                     <div className="h-[1px] flex-1 bg-gradient-to-l from-transparent to-slate-500" />
                 </div>
-                <div className="">{renderPlayers(match.team2Name, match.matchResult?.winner === '2', match.matchResult?.winner === '1')}</div>
+                <div className="">{renderPlayers(match.teams?.team2?.players?.map(p => p.fullName).join(' / ') || 'TBD', match.winner === 'team2', match.winner === 'team1')}</div>
             </div>
-            <div className="bg-slate-800/40 px-6 flex items-center border-t border-white/5 relative h-[48px] shrink-0">
+            <div className="bg-slate-800/40 px-6 flex items-center border-t border-white/5 relative h-[48px] shrink-0 rounded-b-[1.5rem]">
                 {/* Left Section: Play Button - flex-1 pushes center */}
                 <div className="flex-1 flex items-center justify-start">
                     <button

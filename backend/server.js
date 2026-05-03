@@ -58,17 +58,10 @@ app.get('/api/scheduler/courts', async (req, res) => {
         status = 'Unavailable';
       }
 
-      const activeMatch = await mapMatchDataGlobal(c.activeMatchId);
+      const activeMatch = await mapMatchDataGlobal(c.activeMatchId, null, true);
       const upcomingMatch = await mapMatchDataGlobal(c.upcomingMatchId);
 
-      if (activeMatch) {
-        activeMatch.team1Name = activeMatch.players.team1.join(' / ');
-        activeMatch.team2Name = activeMatch.players.team2.join(' / ');
-        // roundName is now fetched from DB by mapMatchDataGlobal
-      }
       if (upcomingMatch) {
-        upcomingMatch.team1Name = upcomingMatch.players.team1.join(' / ');
-        upcomingMatch.team2Name = upcomingMatch.players.team2.join(' / ');
         upcomingMatch.roundName = upcomingMatch.roundName || `Round ${upcomingMatch.roundNumber}`;
       }
 
@@ -102,7 +95,7 @@ const getPlayerDetailsGlobal = async (particId, playerMap, participationMap = nu
   return details;
 };
 
-const mapMatchDataGlobal = async (matchInput, preFetchedData = null) => {
+const mapMatchDataGlobal = async (matchInput, preFetchedData = null, includePointArrays = false) => {
   if (!matchInput) return null;
 
   // Resolve match document if only ID is provided
@@ -138,11 +131,17 @@ const mapMatchDataGlobal = async (matchInput, preFetchedData = null) => {
     const team2Details = getPlayerDetailsSync(tMatch.teams?.team2);
 
     const gamesSource = liveMatch?.games || tMatch.games || [];
-    let currentScores = { team1: 0, team2: 0 };
-    if (gamesSource.length > 0) {
-      currentScores = gamesSource[gamesSource.length - 1].accumulatedScores || currentScores;
-    }
 
+    const mappedGames = gamesSource.map(g => {
+      const gMapped = {
+        gameNumber: g.gameNumber,
+        status: g.status,
+        durationMins: g.durationMins,
+        scores: g.scores
+      };
+      if (includePointArrays && g.pointArrays) gMapped.pointArrays = g.pointArrays;
+      return gMapped;
+    });
     return {
       _id: tMatch._id.toString(),
       matchIndex: tMatch.matchIndex,
@@ -153,23 +152,15 @@ const mapMatchDataGlobal = async (matchInput, preFetchedData = null) => {
       roundName: tMatch.roundName || (tMatch.roundNumber ? `Round ${tMatch.roundNumber}` : 'Round 1'),
       roundNumber: tMatch.roundNumber,
       status: (['Completed', 'Forfeited'].includes(tMatch.status)) ? tMatch.status : (liveMatch?.status || tMatch.status),
-      winner: tMatch.matchResult?.winner,
+      winner: tMatch.winner,
       winnerMatchId: tMatch.winnerMatchId ? tMatch.winnerMatchId.toString() : null,
       sourceMatch1Id: tMatch.sourceMatch1Id ? tMatch.sourceMatch1Id.toString() : null,
       sourceMatch2Id: tMatch.sourceMatch2Id ? tMatch.sourceMatch2Id.toString() : null,
-      players: {
-        team1: team1Details.map(d => d.fullName),
-        team2: team2Details.map(d => d.fullName)
-      },
       teams: {
-        team1: { players: team1Details },
-        team2: { players: team2Details }
+        team1: { participationId: tMatch.teams?.team1, players: team1Details },
+        team2: { participationId: tMatch.teams?.team2, players: team2Details }
       },
-      currentScores,
-      scores: liveMatch?.scores || currentScores,
-      games: gamesSource,
-      matchResult: tMatch.matchResult || { winner: null, finalScore: null, totalDurationMins: 0 },
-      participation: tMatch.teams,
+      games: mappedGames,
       gamesPerMatch: tMatch.parameters?.gamesPerMatch || 3,
       pointsPerGame: tMatch.parameters?.pointsPerGame || 21,
       goldenPointAt: tMatch.parameters?.goldenPointAt || 20,
@@ -201,11 +192,17 @@ const mapMatchDataGlobal = async (matchInput, preFetchedData = null) => {
   // Priority: Use Live 'Match' record for real-time state (Scores, Games, Serving)
   // Fallback: Use 'TournamentMatch' record for historical or static data
   const gamesSource = liveMatch?.games || tMatch.games || [];
-  let currentScores = { team1: 0, team2: 0 };
-  if (gamesSource.length > 0) {
-    currentScores = gamesSource[gamesSource.length - 1].accumulatedScores || currentScores;
-  }
 
+  const mappedGames = gamesSource.map(g => {
+    const gMapped = {
+      gameNumber: g.gameNumber,
+      status: g.status,
+      durationMins: g.durationMins,
+      scores: g.scores
+    };
+    if (includePointArrays && g.pointArrays) gMapped.pointArrays = g.pointArrays;
+    return gMapped;
+  });
   return {
     matchIndex: tMatch.matchIndex,
     courtId: tMatch.courtId,
@@ -217,24 +214,15 @@ const mapMatchDataGlobal = async (matchInput, preFetchedData = null) => {
     gamesPerMatch: tMatch.parameters?.gamesPerMatch || 3,
     pointsPerGame: tMatch.parameters?.pointsPerGame || 21,
     goldenPointAt: tMatch.parameters?.goldenPointAt || 20,
-    players: {
-      team1: team1Details.map(d => d.fullName),
-      team2: team2Details.map(d => d.fullName)
-    },
-    playerIds: {
-      team1: team1Details.map(d => d.id),
-      team2: team2Details.map(d => d.id)
-    },
     teams: {
-      team1: { players: team1Details },
-      team2: { players: team2Details }
+      team1: { participationId: tMatch.teams?.team1, players: team1Details },
+      team2: { participationId: tMatch.teams?.team2, players: team2Details }
     },
     status: (['Completed', 'Forfeited'].includes(tMatch.status)) ? tMatch.status : (liveMatch?.status || tMatch.status),
-    games: gamesSource,
-    scores: liveMatch?.scores || currentScores,
+    winner: tMatch.winner || null,
+    games: mappedGames,
     servingPlayer: liveMatch?.servingPlayer || tMatch.servingPlayer,
     tossWinner: liveMatch?.tossWinner || tMatch.tossWinner,
-    matchResult: tMatch.matchResult || { winner: null, finalScore: null, totalDurationMins: 0 },
     gamesPerMatch: tMatch.parameters?.gamesPerMatch || 3,
     pointsPerGame: tMatch.parameters?.pointsPerGame || 21,
     goldenPointAt: tMatch.parameters?.goldenPointAt || 20,
@@ -242,7 +230,6 @@ const mapMatchDataGlobal = async (matchInput, preFetchedData = null) => {
     sourceMatch1Id: tMatch.sourceMatch1Id,
     sourceMatch2Id: tMatch.sourceMatch2Id,
     _id: tMatch._id,
-    participation: tMatch.teams,
     lockedByDevice: liveMatch?.lockedByDevice || null,
     lockedByDeviceId: liveMatch?.lockedByDeviceId || null
   };
@@ -259,7 +246,7 @@ const broadcastCourtUpdate = async (courtId, lastMatchOverride = null) => {
     }
     console.log(`[Broadcast] Court ${courtId} state: Active=${court.activeMatchId?._id}, Upcoming=${court.upcomingMatchId?._id}`);
 
-    const mappedMatch = await mapMatchDataGlobal(court.activeMatchId);
+    const mappedMatch = await mapMatchDataGlobal(court.activeMatchId, null, true);
     const mappedNextMatch = await mapMatchDataGlobal(court.upcomingMatchId);
 
     let displayMatch = mappedMatch;
@@ -312,28 +299,36 @@ app.get('/api/court_status/:courtId', async (req, res) => {
       console.error(`[Broadcast] Court ${courtId} not found for update!`);
       return res.json({ success: false, message: 'Court not found' });
     }
-    console.log(`[Broadcast] Court ${court.courtId} state: Active=${court.activeMatchId?._id || 'null'}, Status=${court.activeMatchId?.status || 'N/A'}`);
+    const isLean = req.query.mode === 'lean';
+    console.log(`[Court Status] Court ${court.courtId} | Mode: ${isLean ? 'Lean' : 'Full'}`);
 
-    let mappedMatch = await mapMatchDataGlobal(court.activeMatchId);
-    const mappedNextMatch = await mapMatchDataGlobal(court.upcomingMatchId);
+    let mappedMatch = await mapMatchDataGlobal(court.activeMatchId, null, true);
+    
+    // Conditional logic for Lean Mode optimization
+    let mappedNextMatch = null;
+    let mappedLastMatch = null;
 
-    // Provide visibility for Scheduled/Assigned/Forfeited matches
-    if (mappedMatch && !['Assigned', 'Scheduled', 'Started', 'In Progress', 'Completed', 'Forfeited'].includes(mappedMatch.status)) {
-      mappedMatch = null;
+    if (!isLean) {
+        mappedNextMatch = await mapMatchDataGlobal(court.upcomingMatchId);
+        
+        // Visibility check for non-lean modes
+        if (mappedMatch && !['Assigned', 'Scheduled', 'Started', 'In Progress', 'Completed', 'Forfeited'].includes(mappedMatch.status)) {
+            mappedMatch = null;
+        }
+
+        if (!mappedMatch) {
+            const legacyMatch = await Match.findOne({ courtId }).sort({ createdAt: -1 });
+            if (legacyMatch && ['Started', 'In Progress'].includes(legacyMatch.status)) {
+                mappedMatch = legacyMatch;
+            }
+        }
+
+        const lastMatch = await TournamentMatch.findOne({
+            courtId,
+            status: { $in: ['Completed', 'Forfeited'] }
+        }).sort({ updatedAt: -1 }).lean();
+        mappedLastMatch = lastMatch ? await mapMatchDataGlobal(lastMatch) : null;
     }
-
-    if (!mappedMatch) {
-      const legacyMatch = await Match.findOne({ courtId }).sort({ createdAt: -1 });
-      if (legacyMatch && ['Started', 'In Progress'].includes(legacyMatch.status)) {
-        mappedMatch = legacyMatch;
-      }
-    }
-
-    const lastMatch = await TournamentMatch.findOne({
-      courtId,
-      status: { $in: ['Completed', 'Forfeited'] }
-    }).sort({ updatedAt: -1 }).lean();
-    const mappedLastMatch = lastMatch ? await mapMatchDataGlobal(lastMatch) : null;
 
     return res.json({
       success: true,
@@ -569,6 +564,23 @@ app.get('/api/scheduler/results', async (req, res) => {
     res.status(500).json({ success: false, message: err.message });
   }
 });
+
+app.get('/api/scheduler/completed-matches', async (req, res) => {
+  try {
+    const matches = await TournamentMatch.find({ 
+      status: { $in: ['Completed', 'Forfeited'] } 
+    }).sort({ updatedAt: -1 }).lean();
+    
+    // Efficiently map all matches
+    const mappedMatches = await Promise.all(matches.map(async m => {
+      return await mapMatchDataGlobal(m, null, true);
+    }));
+
+    res.json({ success: true, data: mappedMatches });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
 app.post('/api/test/simulate-bracket', async (req, res) => {
   try {
     const { numPlayers } = req.body;
@@ -609,12 +621,11 @@ app.post('/api/test/simulate-bracket', async (req, res) => {
           roundNumber: round,
           matchIndex: (i / 2) + 1,
           status,
-          team1Name: team1.name,
-          team2Name: team2.name,
-          matchResult: {
-            winner: winner === team1 ? '1' : '2',
-            finalScore: "21-0, 21-0"
+          teams: {
+            team1: { players: [{ fullName: team1.name, id: `S1-${matchId}` }] },
+            team2: { players: [{ fullName: team2.name, id: `S2-${matchId}` }] }
           },
+          winner: winner === team1 ? 'team1' : 'team2',
           // Temp tracking for linkage
           _tempSource1: team1.type === 'match' ? team1.id : null,
           _tempSource2: team2.type === 'match' ? team2.id : null,
@@ -1010,11 +1021,7 @@ app.get('/api/scheduler/bracket-view/:categoryId', async (req, res) => {
     const mappedMatches = await Promise.all(matches.map(async m => {
       const matchData = await mapMatchDataGlobal(m, preFetchedData);
 
-      return {
-        ...matchData,
-        team1Name: matchData.players.team1.join(' / ') || (m.teams?.team1 ? "Unknown Team" : (m.sourceMatch1Id ? "TBD" : "BYE")),
-        team2Name: matchData.players.team2.join(' / ') || (m.teams?.team2 ? "Unknown Team" : (m.sourceMatch2Id ? "TBD" : "BYE"))
-      };
+      return matchData;
     }));
     console.timeEnd(`[BracketView] ${categoryId} - Mapping`);
 
@@ -1059,14 +1066,10 @@ app.patch('/api/scheduler/match/:matchId', async (req, res) => {
     const match = await TournamentMatch.findById(matchId);
     if (!match) return res.status(404).json({ success: false, message: 'Match not found' });
 
-    // Support both 'participation' and 'teams' keys for updates
-    if (updateData.participation) {
-      updateData.teams = updateData.participation;
-    }
 
     // --- PLAYER CONFLICT VALIDATION ---
     // Trigger check if court is being assigned/changed OR if teams are being updated
-    if (updateData.courtId || updateData.participation || updateData.teams) {
+    if (updateData.courtId || updateData.teams) {
       const targetCourtId = updateData.courtId || match.courtId;
 
       if (targetCourtId) {
@@ -1085,7 +1088,7 @@ app.patch('/api/scheduler/match/:matchId', async (req, res) => {
           return [...new Set([...p1, ...p2])].filter(Boolean);
         };
 
-        const finalTeams = updateData.participation || updateData.teams || match.participation || match.teams;
+        const finalTeams = updateData.teams || match.teams;
         const targetPlayerIds = await getPlayers({ teams: finalTeams });
 
         // 2. Find all other active matches (Assigned, Scheduled, In Progress)
@@ -1122,9 +1125,9 @@ app.patch('/api/scheduler/match/:matchId', async (req, res) => {
 
     // Lifecycle Transition Logic
     if (updateData.courtId || updateData.courtId === "") {
-      const finalParticipation = updateData.participation || updateData.teams || match.participation || match.teams;
-      const t1 = finalParticipation?.team1;
-      const t2 = finalParticipation?.team2;
+      const finalTeams = updateData.teams || match.teams;
+      const t1 = finalTeams?.team1;
+      const t2 = finalTeams?.team2;
 
       if (updateData.courtId) {
         // Validate: Cannot assign court until both teams are known
@@ -1278,8 +1281,8 @@ const syncTournamentMatchToLiveRecord = async (tmId) => {
     return [p.player1Id, p.player2Id].filter(Boolean);
   };
 
-  const team1Ids = await fetchParticipationDetails(tm.participation?.team1 || tm.teams?.team1);
-  const team2Ids = await fetchParticipationDetails(tm.participation?.team2 || tm.teams?.team2);
+  const team1Ids = await fetchParticipationDetails(tm.teams?.team1);
+  const team2Ids = await fetchParticipationDetails(tm.teams?.team2);
 
   const matchPayload = {
     courtId: tm.courtId,
@@ -1405,12 +1408,12 @@ const enrichMatchForSpectators = async (match) => {
   }
 
   if (matchObj.tossWinner) {
-    if (matchObj.tossWinner === "1" || matchObj.tossWinner === "2") {
+    if (matchObj.tossWinner === "team1" || matchObj.tossWinner === "team2") {
       matchObj.tossWinnerId = matchObj.tossWinner;
-      const teamKey = `team${matchObj.tossWinner}`;
+      const teamKey = matchObj.tossWinner;
       const players = matchObj.teams?.[teamKey]?.players || [];
       matchObj.tossWinnerName = players.map(p => p.fullName).join(' / ');
-      // Legacy fallback
+      // Legacy fallback for display apps
       matchObj.tossWinner = matchObj.tossWinnerName;
     } else {
       const s = resolve(matchObj.tossWinner);
@@ -1419,29 +1422,23 @@ const enrichMatchForSpectators = async (match) => {
     }
   }
 
-  if (matchObj.matchResult?.winner) {
-    const winner = matchObj.matchResult.winner;
-    if (winner === "1" || winner === "2") {
-      matchObj.matchResult.winnerId = winner;
-      const teamKey = `team${winner}`;
+  if (matchObj.winner) {
+    const winner = matchObj.winner;
+    if (winner === "team1" || winner === "team2") {
+      matchObj.winnerId = winner;
+      const teamKey = winner;
       const players = matchObj.teams?.[teamKey]?.players || [];
-      matchObj.matchResult.winnerName = players.map(p => p.fullName).join(' / ');
-      // Legacy fallback
-      matchObj.matchResult.winner = matchObj.matchResult.winnerName;
+      matchObj.winnerName = players.map(p => p.fullName).join(' / ');
+      // Legacy fallback for display apps
+      matchObj.winner = matchObj.winnerName;
     } else {
       const s = resolve(winner);
-      matchObj.matchResult.winnerId = s.id;
-      matchObj.matchResult.winnerName = s.fullName;
-      matchObj.matchResult.winner = s.fullName;
+      matchObj.winnerId = s.id;
+      matchObj.winnerName = s.fullName;
+      matchObj.winner = s.fullName;
     }
   }
 
-  // Ensure 'scores' exists at top level for mobile app compatibility
-  if (matchObj.games && matchObj.games.length > 0) {
-    matchObj.scores = matchObj.games[matchObj.games.length - 1].accumulatedScores || { team1: 0, team2: 0 };
-  } else {
-    matchObj.scores = { team1: 0, team2: 0 };
-  }
   return matchObj;
 };
 
@@ -1452,9 +1449,12 @@ const completeTournamentMatch = async (tmId, resultData, isForfeit = false, fina
   try {
     const tm = await TournamentMatch.findByIdAndUpdate(tmId, {
       status: isForfeit ? 'Forfeited' : 'Completed',
-      matchResult: resultData,
+      winner: resultData.winner,
       ...(finalGames && { games: finalGames })
     }, { new: true });
+
+    const isT1Winner = resultData.winner === 'team1';
+
 
     if (!tm) {
       console.error(`[completeTournamentMatch] TM ${tmId} not found!`);
@@ -1493,8 +1493,9 @@ const completeTournamentMatch = async (tmId, resultData, isForfeit = false, fina
     if (tm.categoryId && tm.categoryId.startsWith('RR_')) {
       console.log(`[RoundRobin] Updating standings for categoryId: ${tm.categoryId}`);
       try {
-        const t1Id = parseInt(resultData.winner) === 1 ? tm.teams.team1 : tm.teams.team2;
-        const t2Id = parseInt(resultData.winner) === 1 ? tm.teams.team2 : tm.teams.team1;
+        // winner check moved to top of function
+        const t1Id = isT1Winner ? tm.teams.team1 : tm.teams.team2;
+        const t2Id = isT1Winner ? tm.teams.team2 : tm.teams.team1;
 
         const getPlayerId = async (particId) => {
           const p = await Participation.findById(particId).lean();
@@ -1512,8 +1513,8 @@ const completeTournamentMatch = async (tmId, resultData, isForfeit = false, fina
 
         if (tm.games) {
           tm.games.forEach(g => {
-            const s1 = g.accumulatedScores?.team1 || 0;
-            const s2 = g.accumulatedScores?.team2 || 0;
+            const s1 = g.scores?.team1 || 0;
+            const s2 = g.scores?.team2 || 0;
             p1Points += s1;
             p2Points += s2;
             if (s1 > s2) p1Games++;
@@ -1521,13 +1522,14 @@ const completeTournamentMatch = async (tmId, resultData, isForfeit = false, fina
           });
         }
 
-        const winnerTeam = parseInt(resultData.winner);
+        // winner check moved to top of function
+        const winnerTeam = isT1Winner ? 1 : 2;
 
         // Update Winner
-        const winnerPId = winnerTeam === 1 ? p1Id : p2Id;
-        const winnerPointsDiff = winnerTeam === 1 ? (p1Points - p2Points) : (p2Points - p1Points);
-        const winnerGamesWon = winnerTeam === 1 ? p1Games : p2Games;
-        const winnerGamesLost = winnerTeam === 1 ? p2Games : p1Games;
+        const winnerPId = isT1Winner ? p1Id : p2Id;
+        const winnerPointsDiff = isT1Winner ? (p1Points - p2Points) : (p2Points - p1Points);
+        const winnerGamesWon = isT1Winner ? p1Games : p2Games;
+        const winnerGamesLost = isT1Winner ? p2Games : p1Games;
 
         await RoundRobinStanding.findOneAndUpdate(
           { categoryId: tm.categoryId, playerId: winnerPId },
@@ -1544,10 +1546,10 @@ const completeTournamentMatch = async (tmId, resultData, isForfeit = false, fina
         );
 
         // Update Loser
-        const loserPId = winnerTeam === 1 ? p2Id : p1Id;
-        const loserPointsDiff = winnerTeam === 1 ? (p2Points - p1Points) : (p1Points - p2Points);
-        const loserGamesWon = winnerTeam === 1 ? p2Games : p1Games;
-        const loserGamesLost = winnerTeam === 1 ? p1Games : p2Games;
+        const loserPId = isT1Winner ? p2Id : p1Id;
+        const loserPointsDiff = isT1Winner ? (p2Points - p1Points) : (p1Points - p2Points);
+        const loserGamesWon = isT1Winner ? p2Games : p1Games;
+        const loserGamesLost = isT1Winner ? p1Games : p2Games;
 
         await RoundRobinStanding.findOneAndUpdate(
           { categoryId: tm.categoryId, playerId: loserPId },
@@ -1575,10 +1577,10 @@ const completeTournamentMatch = async (tmId, resultData, isForfeit = false, fina
       const nextMatch = await TournamentMatch.findById(tm.winnerMatchId);
       if (nextMatch) {
         let winningParticipationId = null;
-        const winnerId = parseInt(resultData.winner);
+        // winner check moved to top of function
 
-        if (winnerId === 1) winningParticipationId = tm.teams.team1;
-        else if (winnerId === 2) winningParticipationId = tm.teams.team2;
+        if (isT1Winner) winningParticipationId = tm.teams.team1;
+        else winningParticipationId = tm.teams.team2;
 
         if (winningParticipationId) {
           console.log(`[Bracket] Advancing runner: ${winningParticipationId} to Match: ${nextMatch._id}`);
@@ -1658,16 +1660,16 @@ const updateCategoryResult = async (categoryId) => {
 
       const finalMatch = matches.find(m => m.roundName === 'Final');
       if (finalMatch && (finalMatch.status === 'Completed' || finalMatch.status === 'Forfeited')) {
-        const winId = finalMatch.matchResult?.winner;
-        resultData.winner = winId === '1' ? getTeamName(finalMatch.teams.team1) : getTeamName(finalMatch.teams.team2);
-        resultData.runnerUp = winId === '1' ? getTeamName(finalMatch.teams.team2) : getTeamName(finalMatch.teams.team1);
+        const winId = finalMatch.winner;
+        resultData.winner = winId === 'team1' ? getTeamName(finalMatch.teams.team1) : getTeamName(finalMatch.teams.team2);
+        resultData.runnerUp = winId === 'team1' ? getTeamName(finalMatch.teams.team2) : getTeamName(finalMatch.teams.team1);
       }
 
       const semiMatches = matches.filter(m => m.roundName === 'Semi Final');
       const semiLosers = semiMatches.map(m => {
         if (m.status === 'Completed' || m.status === 'Forfeited') {
-          const winId = m.matchResult?.winner;
-          return winId === '1' ? getTeamName(m.teams.team2) : getTeamName(m.teams.team1);
+          const winId = m.winner;
+          return winId === 'team1' ? getTeamName(m.teams.team2) : getTeamName(m.teams.team1);
         }
         return '-';
       }).filter(n => n !== '-' && n !== 'TBD');
@@ -1693,11 +1695,9 @@ app.post('/api/scheduler/match/:matchId/forfeit', async (req, res) => {
   const { forfeitingTeamId } = req.body; // 1 or 2
 
   try {
-    const winnerId = (parseInt(forfeitingTeamId) === 1) ? 2 : 1;
+    const winnerId = forfeitingTeamId === 'team1' ? 'team2' : 'team1';
     const resultData = {
-      winner: String(winnerId),
-      finalScore: "Forfeit",
-      totalDurationMins: 0
+      winner: String(winnerId)
     };
 
     const tm = await completeTournamentMatch(matchId, resultData, true);
@@ -1804,7 +1804,7 @@ io.on('connection', (socket) => {
 
       match.status = 'In Progress';
       console.log(`[StartMatch] Assigning TossWinner=${tossWinnerId}, Serving=${servingPlayerId}, Receiving=${receivingPlayerId}`);
-      match.tossWinner = tossWinnerId || tossWinner; // "1" or "2"
+      match.tossWinner = tossWinnerId || tossWinner; // "team1" or "team2"
       match.servingPlayer = servingPlayerId || servingPlayer; // Prefer ID
       match.receivingPlayer = receivingPlayerId || receivingPlayer; // Prefer ID
       match.startTime = new Date();
@@ -1814,7 +1814,7 @@ io.on('connection', (socket) => {
         match.games.push({
           gameNumber: 1,
           durationMins: 0,
-          accumulatedScores: { team1: 0, team2: 0 },
+          scores: { team1: 0, team2: 0 },
           pointArrays: {}
         });
       }
@@ -1899,13 +1899,12 @@ io.on('connection', (socket) => {
       }
 
       const updateSet = {
-        [`games.${activeGameIndex}.accumulatedScores`]: gameSnapshot.accumulatedScores,
+        [`games.${activeGameIndex}.scores`]: gameSnapshot.scores,
         [`games.${activeGameIndex}.pointArrays`]: safePointArrays,
       };
 
       if (durations) {
         updateSet[`games.${activeGameIndex}.durationMins`] = durations.gameMins;
-        updateSet['matchResult.totalDurationMins'] = durations.matchMins;
       }
 
       if (servingPlayerId) updateSet['servingPlayer'] = servingPlayerId;
@@ -1956,7 +1955,7 @@ io.on('connection', (socket) => {
       const match = await Match.findOneAndUpdate(
         { tournamentMatchId: matchId, lockedByDevice: socket.id },
         {
-          $push: { games: { gameNumber: newGameNumber, status: 'In Progress', accumulatedScores: { team1: 0, team2: 0 }, pointArrays: {} } },
+          $push: { games: { gameNumber: newGameNumber, status: 'In Progress', scores: { team1: 0, team2: 0 }, pointArrays: {} } },
           $set: { currentGameIsOver: false, goldenPointActive: false }
         },
         { returnDocument: 'after' }
@@ -1981,7 +1980,7 @@ io.on('connection', (socket) => {
   });
 
   // Event 5: Terminate / Finalize
-  socket.on('complete_match', async ({ matchId, winner, winnerId, finalScore, durations }) => {
+  socket.on('complete_match', async ({ matchId, winner, winnerId, durations }) => {
     console.log(`[${socket.id}] complete_match triggered for _id=${matchId}, winner=${winner}, winnerId=${winnerId}`);
     try {
       const match = await Match.findOneAndUpdate(
@@ -1990,9 +1989,7 @@ io.on('connection', (socket) => {
           $set: {
             status: 'Completed',
             lockedByDevice: null,
-            'matchResult.winner': String(winnerId || winner),
-            'matchResult.finalScore': finalScore,
-            'matchResult.totalDurationMins': durations.matchMins
+            winner: String(winnerId || winner)
           }
         },
         { returnDocument: 'after' }
@@ -2000,9 +1997,7 @@ io.on('connection', (socket) => {
       if (!match) return;
 
       const resultData = {
-        winner: String(winnerId || winner),
-        finalScore,
-        totalDurationMins: durations?.matchMins
+        winner: String(winnerId || winner)
       };
 
       if (match.tournamentMatchId) {

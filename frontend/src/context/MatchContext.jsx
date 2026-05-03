@@ -16,8 +16,8 @@ export const MatchProvider = ({ children }) => {
 
   // Setup State
   const [tossWinner, setTossWinner] = useState(null);
-  const [teamOnLeft, setTeamOnLeft] = useState(1); // 1 = team1 on left, 2 = team2 on left
-  const [servingTeam, setServingTeam] = useState(null); // 1 or 2
+  const [teamOnLeft, setTeamOnLeft] = useState('team1'); // 'team1' on left, 'team2' on left
+  const [servingTeam, setServingTeam] = useState(null); // 'team1' or 'team2'
   const [initialSetupDone, setInitialSetupDone] = useState(false);
 
   // Match State
@@ -56,7 +56,7 @@ export const MatchProvider = ({ children }) => {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch(`${CONFIG.BACKEND_URL}/api/court_status/${courtId}`);
+      const res = await fetch(`${CONFIG.BACKEND_URL}/api/court_status/${courtId}?mode=lean`);
       if (!res.ok) throw new Error("Backend API unreachable");
       const respData = await res.json();
       
@@ -80,8 +80,6 @@ export const MatchProvider = ({ children }) => {
 
       data.deviceId = persistentDeviceId;
       data.noOfGames = data.gamesPerMatch;
-      data.team1Name = data.teams.team1.players.map(p => p.fullName).join(' / ');
-      data.team2Name = data.teams.team2.players.map(p => p.fullName).join(' / ');
 
       setPointArrays({ "team1": [], "team2": [] });
 
@@ -94,22 +92,23 @@ export const MatchProvider = ({ children }) => {
          const wins = { team1: 0, team2: 0 };
          const history = (data.games || []).map(g => ({
             game: g.gameNumber,
-            scores: g.accumulatedScores,
-            winner: g.accumulatedScores?.team1 > g.accumulatedScores?.team2 ? 1 : 2
+            scores: g.scores,
+            winner: g.scores?.team1 > g.scores?.team2 ? 'team1' : 'team2'
          }));
-         for (let i = 0; i < history.length - 1; i++) wins[`team${history[i].winner}`]++;
+         for (let i = 0; i < history.length - 1; i++) wins[history[i].winner]++;
          
          setGameHistory(history.slice(0, -1));
          setGamesWon(wins);
          setCurrentGame(data.games?.length || 1);
          const activeGame = data.games?.[data.games.length - 1];
          if (activeGame) {
-            setScores(activeGame.accumulatedScores || { team1: 0, team2: 0 });
+            setScores(activeGame.scores || { team1: 0, team2: 0 });
             setPointArrays(activeGame.pointArrays || { team1: [], team2: [] });
          }
          setInitialSetupDone(true);
          setMatchStarted(true);
-         setTossWinner(data.tossWinner === data.team1Name ? 1 : 2);
+         setTossWinner(data.tossWinner === 'team1' || data.tossWinner === (data.teams?.team1?.players?.map(p => p.fullName).join(' / ')) ? 'team1' : 'team2');
+
       }
 
       setMatch(data);
@@ -222,17 +221,25 @@ export const MatchProvider = ({ children }) => {
     // adjust positions for 0-0
     if (match.matchType?.includes('Doubles')) {
       const { initialServer, initialReceiver, servingTeam } = setupData;
-      const recTeamId = servingTeam === 1 ? 2 : 1;
+      const recTeamId = servingTeam === 'team1' ? 'team2' : 'team1';
 
-      const servingPlayers = servingTeam === 1 ? match.teams.team1.players : match.teams.team2.players;
+
+      const servingPlayers = servingTeam === 'team1' ? match.teams.team1.players : match.teams.team2.players;
       const initialServerObj = initialServer;
-      const serverPartnerObj = servingPlayers.find(p => p.id !== initialServer.id);
+      // Robust matching: Find the partner by ensuring it's NOT the selected player (checking both ID and Name)
+      const serverPartnerObj = servingPlayers.find(p => 
+        (p.id && initialServer.id && String(p.id) !== String(initialServer.id)) || 
+        (p.fullName !== initialServer.fullName)
+      ) || servingPlayers.find(p => p.fullName !== initialServer.fullName) || servingPlayers[1];
 
-      const receivingPlayers = recTeamId === 1 ? match.teams.team1.players : match.teams.team2.players;
+      const receivingPlayers = recTeamId === 'team1' ? match.teams.team1.players : match.teams.team2.players;
       const initialReceiverObj = initialReceiver;
-      const receiverPartnerObj = receivingPlayers.find(p => p.id !== initialReceiver.id);
+      const receiverPartnerObj = receivingPlayers.find(p => 
+        (p.id && initialReceiver.id && String(p.id) !== String(initialReceiver.id)) || 
+        (p.fullName !== initialReceiver.fullName)
+      ) || receivingPlayers.find(p => p.fullName !== initialReceiver.fullName) || receivingPlayers[1];
 
-      if (servingTeam === 1) {
+      if (servingTeam === 'team1') {
         setTeam1Pos({ evenSide: initialServerObj, oddSide: serverPartnerObj });
         setTeam2Pos({ evenSide: initialReceiverObj, oddSide: receiverPartnerObj });
       } else {
@@ -245,10 +252,10 @@ export const MatchProvider = ({ children }) => {
       const team1Obj = match.teams.team1.players[0];
       const team2Obj = match.teams.team2.players[0];
       
-      const servingObj = servingTeam === 1 ? team1Obj : team2Obj;
-      const receivingObj = servingTeam === 1 ? team2Obj : team1Obj;
+      const servingObj = servingTeam === 'team1' ? team1Obj : team2Obj;
+      const receivingObj = servingTeam === 'team1' ? team2Obj : team1Obj;
 
-      if (servingTeam === 1) {
+      if (servingTeam === 'team1') {
         setTeam1Pos({ evenSide: servingObj, oddSide: servingObj });
         setTeam2Pos({ evenSide: receivingObj, oddSide: receivingObj });
       } else {
@@ -273,17 +280,18 @@ export const MatchProvider = ({ children }) => {
     if (!r) {
         // Fallback for singles or if not provided
         const stId = setupData?.servingTeam || servingTeam;
-        const recTeamId = stId === 1 ? 2 : 1;
-        r = match.teams?.[`team${recTeamId}`]?.players?.[0];
+        const recTeamId = stId === 'team1' ? 'team2' : 'team1';
+        r = match.teams?.[recTeamId]?.players?.[0];
     }
 
     // Broadcast Toss details to backend to officially stamp the StartTime
     if (socket) {
-        const tossWinnerName = w === 1 ? match.team1Name : (w === 2 ? match.team2Name : null);
+        const tossWinnerId = w === 'team1' ? 'team1' : 'team2';
+        const tossWinnerName = tossWinnerId === 'team1' ? match.teams?.team1?.players?.map(p => p.fullName).join(' / ') : match.teams?.team2?.players?.map(p => p.fullName).join(' / ');
         
         socket.emit('start_match', { 
           matchId: match._id, 
-          tossWinnerId: w ? String(w) : null, // team index "1" or "2"
+          tossWinnerId: tossWinnerId,
           tossWinner: tossWinnerName, 
           servingPlayerId: s?.id,
           servingPlayer: s?.id, 
@@ -316,10 +324,10 @@ export const MatchProvider = ({ children }) => {
     // Increment wins and check for match completion UI state
     setGamesWon(prevWins => {
       const nextWins = { ...prevWins };
-      nextWins[`team${winningTeam}`] += 1;
+      nextWins[winningTeam] += 1;
 
       const threshold = Math.ceil(match.noOfGames / 2);
-      if (nextWins[`team${winningTeam}`] >= threshold) {
+      if (nextWins[winningTeam] >= threshold) {
         setIsMatchOver(true);
       }
       return nextWins;
@@ -349,9 +357,9 @@ export const MatchProvider = ({ children }) => {
     });
 
     // 1. Calculate NEW Scores
-    const newTeam1Score = scoringTeam === 1 ? scores.team1 + 1 : scores.team1;
-    const newTeam2Score = scoringTeam === 2 ? scores.team2 + 1 : scores.team2;
-    const scoringTeamPoints = scoringTeam === 1 ? newTeam1Score : newTeam2Score;
+    const newTeam1Score = scoringTeam === 'team1' ? scores.team1 + 1 : scores.team1;
+    const newTeam2Score = scoringTeam === 'team2' ? scores.team2 + 1 : scores.team2;
+    const scoringTeamPoints = scoringTeam === 'team1' ? newTeam1Score : newTeam2Score;
     const isEven = scoringTeamPoints % 2 === 0;
 
     // 2. Victory/Game-Point Calculations
@@ -365,14 +373,14 @@ export const MatchProvider = ({ children }) => {
     const isWinT1 = (t1 >= target && t1 - t2 >= 2) || (t1 === cap);
     const isWinT2 = (t2 >= target && t2 - t1 >= 2) || (t2 === cap);
     const winDetected = isWinT1 || isWinT2;
-    const winnerId = isWinT1 ? 1 : 2;
+    const winnerId = isWinT1 ? 'team1' : 'team2';
 
     const isGoldenPoint = !winDetected && newTeam1Score === goldenTrigger && newTeam2Score === goldenTrigger;
 
     // 3. Update Point Arrays for Sync (Using safe team indices to avoid dot-key Mongoose errors)
     const nextArrays = { ...pointArrays };
-    const t1ScoreInc = scoringTeam === 1 ? 1 : 0;
-    const t2ScoreInc = scoringTeam === 2 ? 1 : 0;
+    const t1ScoreInc = scoringTeam === 'team1' ? 1 : 0;
+    const t2ScoreInc = scoringTeam === 'team2' ? 1 : 0;
     nextArrays["team1"] = [...(nextArrays["team1"] || []), t1ScoreInc];
     nextArrays["team2"] = [...(nextArrays["team2"] || []), t2ScoreInc];
 
@@ -382,7 +390,7 @@ export const MatchProvider = ({ children }) => {
     // Side out?
     if (scoringTeam !== servingTeam) {
       const newServingTeam = scoringTeam;
-      if (newServingTeam === 1) {
+      if (newServingTeam === 'team1') {
         nextServer = isEven ? team1Pos.evenSide : team1Pos.oddSide;
       } else {
         nextServer = isEven ? team2Pos.evenSide : team2Pos.oddSide;
@@ -390,7 +398,7 @@ export const MatchProvider = ({ children }) => {
       setServingTeam(newServingTeam);
     } else {
       if (match.matchType?.includes('Doubles')) {
-        if (scoringTeam === 1) {
+        if (scoringTeam === 'team1') {
           setTeam1Pos(prev => ({ evenSide: prev.oddSide, oddSide: prev.evenSide }));
         } else {
           setTeam2Pos(prev => ({ evenSide: prev.oddSide, oddSide: prev.evenSide }));
@@ -408,9 +416,9 @@ export const MatchProvider = ({ children }) => {
     if (winDetected) {
        // Check for match completion wins
        const currentWins = { ...gamesWon };
-       currentWins[`team${winnerId}`]++;
+       currentWins[winnerId]++;
        const winThreshold = Math.ceil(match.noOfGames / 2);
-       const matchCompleted = currentWins[`team${winnerId}`] >= winThreshold;
+       const matchCompleted = currentWins[winnerId] >= winThreshold;
        
        // INTERCEPT: Do not pause timer or show Game Over modal yet. Await confirmation.
        setPendingWinDetails({
@@ -427,7 +435,7 @@ export const MatchProvider = ({ children }) => {
              matchId: match._id,
              activeGameIndex: currentGame - 1,
              gameSnapshot: {
-                accumulatedScores: { team1: newTeam1Score, team2: newTeam2Score },
+                scores: { team1: newTeam1Score, team2: newTeam2Score },
                 pointArrays: nextArrays
              },
              durations: { gameMins: Math.ceil(gameTimer.seconds/60), matchMins: Math.ceil(matchTimer.seconds/60) },
@@ -444,7 +452,7 @@ export const MatchProvider = ({ children }) => {
             matchId: match._id,
             activeGameIndex: currentGame - 1,
             gameSnapshot: {
-               accumulatedScores: { team1: newTeam1Score, team2: newTeam2Score },
+               scores: { team1: newTeam1Score, team2: newTeam2Score },
                pointArrays: nextArrays
             },
             durations: { gameMins: Math.ceil(gameTimer.seconds/60), matchMins: Math.ceil(matchTimer.seconds/60) },
@@ -469,7 +477,7 @@ export const MatchProvider = ({ children }) => {
             matchId: match._id,
             activeGameIndex: currentGame - 1,
             gameSnapshot: {
-               accumulatedScores: { team1: team1Score, team2: team2Score },
+               scores: { team1: team1Score, team2: team2Score },
                pointArrays 
             },
             durations: { gameMins: Math.ceil(gameTimer.seconds/60), matchMins: Math.ceil(matchTimer.seconds/60) },
@@ -479,12 +487,11 @@ export const MatchProvider = ({ children }) => {
         });
 
         if (matchCompleted) {
-            const matchWinnerName = winnerId === 1 ? match.team1Name : match.team2Name;
+            const matchWinnerName = winnerId === 'team1' ? match.teams?.team1?.players?.map(p => p.fullName).join(' / ') : match.teams?.team2?.players?.map(p => p.fullName).join(' / ');
             socket.emit('complete_match', {
                matchId: match._id,
                winner: matchWinnerName,
                winnerId: winnerId,
-               finalScore: `${currentWins.team1} - ${currentWins.team2}`,
                durations: { matchMins: Math.ceil(matchTimer.seconds / 60) }
             });
         }
@@ -516,7 +523,7 @@ export const MatchProvider = ({ children }) => {
          matchId: match._id,
          activeGameIndex: currentGame - 1,
          gameSnapshot: {
-            accumulatedScores: undoState.scores,
+            scores: undoState.scores,
             pointArrays: undoState.pointArrays
          },
          durations: { gameMins: Math.ceil(gameTimer.seconds/60), matchMins: Math.ceil(matchTimer.seconds/60) },
@@ -535,8 +542,12 @@ export const MatchProvider = ({ children }) => {
     setGoldenPointActive(false);
   };
 
+  const swapSides = () => {
+    setTeamOnLeft(prev => prev === 'team1' ? 'team2' : 'team1'); // Swap sides
+  };
+
   const nextGame = (setupData = null) => {
-    setTeamOnLeft(prev => prev === 1 ? 2 : 1); // Swap sides
+    swapSides();
     setScores({ team1: 0, team2: 0 });
     setCurrentGame(prev => prev + 1);
     setIsGameOver(false);
@@ -549,11 +560,13 @@ export const MatchProvider = ({ children }) => {
       if (setupData.team1Pos) setTeam1Pos(setupData.team1Pos);
       if (setupData.team2Pos) setTeam2Pos(setupData.team2Pos);
     } else {
-      // Automatic fallback for Singles
+      // Automatic fallback
       const winningTeam = gameHistory[gameHistory.length - 1].winner;
       setServingTeam(winningTeam);
-      const newServer = winningTeam === 1 ? team1Pos.evenSide : team2Pos.evenSide;
-      setActiveServer(newServer);
+      if (match.matchType?.includes('Doubles')) {
+        const newServer = winningTeam === 'team1' ? team1Pos.evenSide : team2Pos.evenSide;
+        setActiveServer(newServer);
+      }
     }
 
     gameTimer.reset();

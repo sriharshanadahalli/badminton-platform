@@ -4,7 +4,7 @@ import {
     Upload, Table as TableIcon, CheckCircle2, AlertCircle,
     Settings, GitBranch, LayoutGrid, ChevronRight,
     FileSpreadsheet, Plus, Save, Play, RefreshCw, Home, BarChart2, Grid, Users, Search,
-    ArrowUpDown, ChevronUp, ChevronDown, Trophy, FlaskConical
+    ArrowUpDown, ChevronUp, ChevronDown, Trophy, FlaskConical, Database
 } from 'lucide-react';
 import { CONFIG } from '../utils/config';
 import Papa from 'papaparse';
@@ -14,12 +14,36 @@ import RoundRobinTableView from '../components/RoundRobinTableView';
 import BracketCard, { MatchStatusBadge } from '../components/BracketCard';
 import { AlertModal, ConfirmModal } from '../components/TournamentModals';
 
+const CATEGORY_PALETTE = [
+    { bg: 'bg-amber-500/10', text: 'text-amber-500', border: 'border-amber-500/20', hover: 'group-hover:text-amber-400' },
+    { bg: 'bg-emerald-500/10', text: 'text-emerald-500', border: 'border-emerald-500/20', hover: 'group-hover:text-emerald-400' },
+    { bg: 'bg-sky-500/10', text: 'text-sky-500', border: 'border-sky-500/20', hover: 'group-hover:text-sky-400' },
+    { bg: 'bg-rose-500/10', text: 'text-rose-500', border: 'border-rose-500/20', hover: 'group-hover:text-rose-400' },
+    { bg: 'bg-violet-500/10', text: 'text-violet-500', border: 'border-violet-500/20', hover: 'group-hover:text-violet-400' },
+    { bg: 'bg-orange-500/10', text: 'text-orange-500', border: 'border-orange-500/20', hover: 'group-hover:text-orange-400' },
+    { bg: 'bg-cyan-500/10', text: 'text-cyan-500', border: 'border-cyan-500/20', hover: 'group-hover:text-cyan-400' },
+    { bg: 'bg-indigo-500/10', text: 'text-indigo-500', border: 'border-indigo-500/20', hover: 'group-hover:text-indigo-400' },
+    { bg: 'bg-pink-500/10', text: 'text-pink-500', border: 'border-pink-500/20', hover: 'group-hover:text-pink-400' },
+    { bg: 'bg-lime-500/10', text: 'text-lime-500', border: 'border-lime-500/20', hover: 'group-hover:text-lime-400' },
+];
+
+const getCategoryColor = (name) => {
+    if (!name) return CATEGORY_PALETTE[0];
+    let hash = 0;
+    for (let i = 0; i < name.length; i++) {
+        hash = name.charCodeAt(i) + ((hash << 5) - hash);
+    }
+    const index = Math.abs(hash) % CATEGORY_PALETTE.length;
+    return CATEGORY_PALETTE[index];
+};
+
 const SchedulerView = () => {
     const [activeTab, setActiveTab] = useState('home'); // 'home', 'data', 'brackets'
     const [categories, setCategories] = useState([]);
     const [summaryData, setSummaryData] = useState([]);
     const [resolvedData, setResolvedData] = useState([]);
     const [resultsData, setResultsData] = useState([]);
+    const [completedMatches, setCompletedMatches] = useState([]);
     const [simMatches, setSimMatches] = useState([]);
     const [simN, setSimN] = useState(16);
     const [loading, setLoading] = useState(false);
@@ -45,8 +69,19 @@ const SchedulerView = () => {
     const [isRRModalOpen, setIsRRModalOpen] = useState(false);
     const [confirm, setConfirm] = useState({ open: false, message: '', title: '', onConfirm: null });
     const [overviewSort, setOverviewSort] = useState({ key: 'categoryName', direction: 'asc' });
+    const [isImportModalOpen, setIsImportModalOpen] = useState(false);
+
+    const isFetched = React.useRef(false);
+    const selectedCategoryRef = React.useRef(selectedCategory);
 
     useEffect(() => {
+        selectedCategoryRef.current = selectedCategory;
+    }, [selectedCategory]);
+
+    useEffect(() => {
+        if (isFetched.current) return;
+        isFetched.current = true;
+
         fetchSummary();
         fetchMetadata();
         fetchCourts();
@@ -64,13 +99,14 @@ const SchedulerView = () => {
             fetchSummary();
             fetchResults();
             fetchPlayerAvailability(true);
-            if (selectedCategory) {
-                fetchBracket(selectedCategory, true);
+            const currentCat = selectedCategoryRef.current;
+            if (currentCat) {
+                fetchBracket(currentCat, true);
             }
         });
 
         return () => socket.disconnect();
-    }, [selectedCategory]);
+    }, []);
 
     // Fetch bracket when category changes
     useEffect(() => {
@@ -83,16 +119,16 @@ const SchedulerView = () => {
     useEffect(() => {
         if (activeTab === 'brackets' && !loading && pendingScrollMatchId) {
             const container = document.getElementById('bracket-view-container');
-            if (!container) return; 
+            if (!container) return;
 
             const element = container.querySelector(`#match-${pendingScrollMatchId}`);
-            
+
             if (element) {
                 // Timeout to ensure layout is fully painted
                 const timer = setTimeout(() => {
                     // 1. Calculate absolute position for vertical window centering
                     const rect = element.getBoundingClientRect();
-                    
+
                     // Vertical centering in the WINDOW (Works for both Bracket and RR)
                     const scrollY = window.pageYOffset + rect.top - (window.innerHeight / 2) + (rect.height / 2);
                     window.scrollTo({ top: scrollY, behavior: 'smooth' });
@@ -101,16 +137,16 @@ const SchedulerView = () => {
                     // RR view has an internal scrollable div, Brackets use the main container
                     const rrContainer = document.getElementById('rr-grid-container');
                     const scrollContainer = rrContainer || container;
-                    
+
                     const containerRect = scrollContainer.getBoundingClientRect();
                     const targetLeft = scrollContainer.scrollLeft + (rect.left - containerRect.left) - (containerRect.width / 2) + (rect.width / 2);
-                    
+
                     scrollContainer.scrollTo({ left: targetLeft, behavior: 'smooth' });
-                    
+
                     setPendingScrollMatchId(null);
                     setTimeout(() => setHighlightedMatchId(null), 3000);
                 }, 150);
-                
+
                 return () => clearTimeout(timer);
             }
         }
@@ -179,9 +215,14 @@ const SchedulerView = () => {
     const fetchResults = async (silent = false) => {
         if (!silent) setLoading(true);
         try {
-            const res = await fetch(`${CONFIG.BACKEND_URL}/api/scheduler/results`);
-            const json = await res.json();
-            if (json.success) setResultsData(json.data);
+            const [res1, res2] = await Promise.all([
+                fetch(`${CONFIG.BACKEND_URL}/api/scheduler/results`),
+                fetch(`${CONFIG.BACKEND_URL}/api/scheduler/completed-matches`)
+            ]);
+            const [json1, json2] = await Promise.all([res1.json(), res2.json()]);
+            
+            if (json1.success) setResultsData(json1.data);
+            if (json2.success) setCompletedMatches(json2.data);
         } catch (err) {
             console.error('Results fetch error:', err);
         } finally {
@@ -280,16 +321,16 @@ const SchedulerView = () => {
             result.sort((a, b) => {
                 const valA = a[overviewSort.key];
                 const valB = b[overviewSort.key];
-                
+
                 // Handle numeric vs string
                 if (typeof valA === 'string') {
-                    return overviewSort.direction === 'asc' 
-                        ? valA.localeCompare(valB) 
+                    return overviewSort.direction === 'asc'
+                        ? valA.localeCompare(valB)
                         : valB.localeCompare(valA);
                 }
-                
-                return overviewSort.direction === 'asc' 
-                    ? valA - valB 
+
+                return overviewSort.direction === 'asc'
+                    ? valA - valB
                     : valB - valA;
             });
         }
@@ -299,7 +340,7 @@ const SchedulerView = () => {
     const jumpToMatch = (catId, matchId) => {
         setActiveTab('brackets');
         setSelectedCategory(catId);
-        
+
         // Set both highlight and pending scroll
         setHighlightedMatchId(matchId);
         setPendingScrollMatchId(matchId);
@@ -411,10 +452,10 @@ const SchedulerView = () => {
     return (
         <div className="min-h-screen bg-[#020617] text-white flex flex-col font-sans selection:bg-amber-500/30">
             {/* [EXPERIMENTAL] Bulk Generation Modal */}
-            <BulkGenerationModal 
-                status={bulkGenStatus} 
-                results={bulkResults} 
-                onClose={() => setBulkGenStatus('idle')} 
+            <BulkGenerationModal
+                status={bulkGenStatus}
+                results={bulkResults}
+                onClose={() => setBulkGenStatus('idle')}
             />
 
             {/* Fixed Navigation Block */}
@@ -449,7 +490,7 @@ const SchedulerView = () => {
             </div>
 
             {/* Content with padding to account for fixed header/footer */}
-            <main className="flex-1 mt-[18vh] mb-[10vh] p-2 lg:p-4 px-4 w-full relative">
+            <main className="flex-1 mt-[22vh] mb-[10vh] p-2 lg:p-4 px-4 w-full relative">
                 <AnimatePresence>
                     {activeTab === 'home' && (
                         <motion.div key="home" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="space-y-8">
@@ -469,7 +510,7 @@ const SchedulerView = () => {
                                         <thead>
                                             <tr className="bg-slate-900/50">
                                                 <th className="px-8 py-4 text-[11px] font-black text-slate-500 uppercase tracking-[0.2em] w-16 text-center">#</th>
-                                                <th 
+                                                <th
                                                     onClick={() => setOverviewSort({ key: 'categoryName', direction: overviewSort.key === 'categoryName' && overviewSort.direction === 'asc' ? 'desc' : 'asc' })}
                                                     className="px-8 py-4 text-[11px] font-black text-slate-500 uppercase tracking-[0.2em] cursor-pointer hover:text-amber-500 transition-colors"
                                                 >
@@ -478,7 +519,7 @@ const SchedulerView = () => {
                                                         <ArrowUpDown className={`w-3 h-3 ${overviewSort.key === 'categoryName' ? 'opacity-100 text-amber-500' : 'opacity-20'}`} />
                                                     </div>
                                                 </th>
-                                                <th 
+                                                <th
                                                     onClick={() => setOverviewSort({ key: 'total', direction: overviewSort.key === 'total' && overviewSort.direction === 'asc' ? 'desc' : 'asc' })}
                                                     className="px-8 py-4 text-[11px] font-black text-slate-500 uppercase tracking-[0.2em] text-center cursor-pointer hover:text-amber-500 transition-colors"
                                                 >
@@ -487,7 +528,7 @@ const SchedulerView = () => {
                                                         <ArrowUpDown className={`w-3 h-3 ${overviewSort.key === 'total' ? 'opacity-100 text-amber-500' : 'opacity-20'}`} />
                                                     </div>
                                                 </th>
-                                                <th 
+                                                <th
                                                     onClick={() => setOverviewSort({ key: 'completed', direction: overviewSort.key === 'completed' && overviewSort.direction === 'asc' ? 'desc' : 'asc' })}
                                                     className="px-8 py-4 text-[11px] font-black text-slate-500 uppercase tracking-[0.2em] text-center cursor-pointer hover:text-amber-500 transition-colors"
                                                 >
@@ -496,7 +537,7 @@ const SchedulerView = () => {
                                                         <ArrowUpDown className={`w-3 h-3 ${overviewSort.key === 'completed' ? 'opacity-100 text-amber-500' : 'opacity-20'}`} />
                                                     </div>
                                                 </th>
-                                                <th 
+                                                <th
                                                     onClick={() => setOverviewSort({ key: 'playersAvailable', direction: overviewSort.key === 'playersAvailable' && overviewSort.direction === 'asc' ? 'desc' : 'asc' })}
                                                     className="px-8 py-4 text-[11px] font-black text-slate-500 uppercase tracking-[0.2em] text-center cursor-pointer hover:text-amber-500 transition-colors"
                                                 >
@@ -505,7 +546,7 @@ const SchedulerView = () => {
                                                         <ArrowUpDown className={`w-3 h-3 ${overviewSort.key === 'playersAvailable' ? 'opacity-100 text-amber-500' : 'opacity-20'}`} />
                                                     </div>
                                                 </th>
-                                                <th 
+                                                <th
                                                     onClick={() => setOverviewSort({ key: 'ongoing', direction: overviewSort.key === 'ongoing' && overviewSort.direction === 'asc' ? 'desc' : 'asc' })}
                                                     className="px-8 py-4 text-[11px] font-black text-slate-500 uppercase tracking-[0.2em] text-center cursor-pointer hover:text-amber-500 transition-colors"
                                                 >
@@ -526,7 +567,7 @@ const SchedulerView = () => {
                                                                 <span className="text-xs font-black text-slate-500">{index + 1}</span>
                                                             </td>
                                                             <td className="px-8 py-6">
-                                                                <span className="text-base font-bold text-white group-hover:text-amber-400 transition-colors uppercase tracking-wide">{cat.categoryName}</span>
+                                                                <span className={`text-base font-bold text-white ${getCategoryColor(cat.categoryName).hover} transition-colors uppercase tracking-wide`}>{cat.categoryName}</span>
                                                             </td>
                                                             <td className="px-8 py-6 text-center">
                                                                 <span className="text-lg font-black text-slate-300">{cat.total}</span>
@@ -535,7 +576,7 @@ const SchedulerView = () => {
                                                                 <span className="text-lg text-emerald-400 font-black tracking-tighter">{cat.completed}</span>
                                                             </td>
                                                             <td className="px-8 py-6 text-center">
-                                                                <button 
+                                                                <button
                                                                     onClick={() => {
                                                                         setActiveTab('players');
                                                                         setPlayerSearch(cat.categoryName);
@@ -682,7 +723,7 @@ const SchedulerView = () => {
                                                         <td className="px-8 py-5">
                                                             <button
                                                                 onClick={() => jumpToMatch(entry.categoryId, entry._id)}
-                                                                className="px-3 py-1 rounded-full bg-amber-500/10 text-amber-500 text-[10px] font-black border border-amber-500/20 uppercase tracking-widest hover:bg-amber-500 hover:text-slate-900 transition-all cursor-pointer flex items-center group/btn"
+                                                                className={`px-3 py-1 rounded-full ${getCategoryColor(entry.categoryName).bg} ${getCategoryColor(entry.categoryName).text} text-[10px] font-black border ${getCategoryColor(entry.categoryName).border} uppercase tracking-widest hover:opacity-80 transition-all cursor-pointer flex items-center group/btn`}
                                                             >
                                                                 {entry.categoryName}
                                                                 <ChevronRight className="w-3 h-3 ml-1 opacity-0 group-hover/btn:opacity-100 -translate-x-2 group-hover/btn:translate-x-0 transition-all" />
@@ -729,7 +770,7 @@ const SchedulerView = () => {
                     )}
 
                     {activeTab === 'results' && (
-                        <ResultsView data={resultsData} loading={loading} />
+                        <ResultsView data={resultsData} completedMatches={completedMatches} loading={loading} />
                     )}
 
                     {activeTab === 'simulator' && (
@@ -773,7 +814,7 @@ const SchedulerView = () => {
                                                         <span className="text-[10px] font-black text-slate-500 uppercase tracking-[0.3em]">Current Match</span>
                                                     </div>
                                                     {court.activeMatch?.categoryName && (
-                                                        <span className="text-[10px] font-black text-amber-500/60 uppercase tracking-widest italic truncate max-w-[200px]">
+                                                        <span className={`text-[10px] font-black ${getCategoryColor(court.activeMatch.categoryName).text} opacity-80 uppercase tracking-widest italic truncate max-w-[200px]`}>
                                                             {court.activeMatch.categoryName}
                                                         </span>
                                                     )}
@@ -805,7 +846,7 @@ const SchedulerView = () => {
                                                         <span className="text-[10px] font-black text-slate-500 uppercase tracking-[0.3em]">Upcoming Match</span>
                                                     </div>
                                                     {court.upcomingMatch?.categoryName && (
-                                                        <span className="text-[10px] font-black text-indigo-500/60 uppercase tracking-widest italic truncate max-w-[200px]">
+                                                        <span className={`text-[10px] font-black ${getCategoryColor(court.upcomingMatch.categoryName).text} opacity-80 uppercase tracking-widest italic truncate max-w-[200px]`}>
                                                             {court.upcomingMatch.categoryName}
                                                         </span>
                                                     )}
@@ -837,10 +878,40 @@ const SchedulerView = () => {
 
                     {activeTab === 'data' && (
                         <motion.div key="data" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="space-y-8">
-                            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                                <UploadSection title="Match Categories" description="Upload ID & Category Mapping" onUpload={(e) => handleFileUpload(e, 'categories')} color="blue" />
-                                <UploadSection title="Player Profiles" description="Upload Profile IDs & Names" onUpload={(e) => handleFileUpload(e, 'players')} color="purple" />
-                                <UploadSection title="Match Participation" description="Link Categories & Team Members" onUpload={(e) => handleFileUpload(e, 'participation')} color="emerald" />
+                            <div className="bg-slate-900/40 rounded-[2.5rem] border border-white/5 p-8 shadow-2xl overflow-hidden relative">
+                                <div className="flex flex-col lg:flex-row items-center justify-between gap-8">
+                                    {/* Left: Branding */}
+                                    <div className="flex items-center space-x-6 min-w-[280px]">
+                                        <div className="p-4 bg-amber-500/10 rounded-[2rem] border border-amber-500/20 shadow-xl shadow-amber-500/5">
+                                            <Database className="w-8 h-8 text-amber-500" />
+                                        </div>
+                                        <div>
+                                            <h3 className="text-2xl font-black text-white uppercase tracking-tighter italic leading-none">Data Registry</h3>
+                                            <p className="text-slate-500 text-[10px] font-bold uppercase tracking-widest mt-2 opacity-60">Manage Mappings & Participant Links</p>
+                                        </div>
+                                    </div>
+
+                                    {/* Right: Actions */}
+                                    <div className="flex items-center justify-end space-x-4 min-w-[320px]">
+                                        <div className="relative group flex-1">
+                                            <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500 group-focus-within:text-amber-500 transition-colors" />
+                                            <input 
+                                                type="text"
+                                                placeholder="Search registry records..."
+                                                value={dataSearch}
+                                                onChange={(e) => setDataSearch(e.target.value)}
+                                                className="bg-slate-950/40 border border-white/5 rounded-xl py-3 pl-12 pr-6 text-xs text-white placeholder:text-slate-600 focus:outline-none focus:border-amber-500/50 focus:ring-4 focus:ring-amber-500/5 w-full transition-all"
+                                            />
+                                        </div>
+                                        <button
+                                            onClick={() => setIsImportModalOpen(true)}
+                                            className="flex items-center space-x-2 bg-amber-500/10 hover:bg-amber-500/20 text-amber-500 border border-amber-500/20 px-6 py-3 rounded-xl transition-all uppercase tracking-widest text-[10px] font-black shrink-0 shadow-lg shadow-amber-500/5"
+                                        >
+                                            <Upload className="w-4 h-4" />
+                                            <span>Import CSV</span>
+                                        </button>
+                                    </div>
+                                </div>
                             </div>
                             <DataTable data={filteredResolvedData} search={dataSearch} setSearch={setDataSearch} />
                         </motion.div>
@@ -865,16 +936,16 @@ const SchedulerView = () => {
                                                 <GitBranch className="w-4 h-4" />
                                                 <span className="text-[10px] uppercase tracking-widest">Generate Bracket</span>
                                             </button>
-                                            
+
                                             <button onClick={() => setIsRRModalOpen(true)} className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold px-8 py-3 rounded-2xl transition-all shadow-lg flex items-center justify-center space-x-2">
                                                 <Trophy className="w-4 h-4" />
                                                 <span className="text-[10px] uppercase tracking-widest">Generate Round Robin</span>
                                             </button>
 
                                             {/* [EXPERIMENTAL] Bulk Button */}
-                                            <button 
-                                                onClick={handleGenerateAllBrackets} 
-                                                disabled={loading || bulkGenStatus === 'processing'} 
+                                            <button
+                                                onClick={handleGenerateAllBrackets}
+                                                disabled={loading || bulkGenStatus === 'processing'}
                                                 className="bg-slate-800 hover:bg-slate-700 text-white font-bold px-8 py-3 rounded-2xl transition-all shadow-lg flex items-center justify-center space-x-2 border border-white/5"
                                             >
                                                 <RefreshCw className={`w-4 h-4 ${bulkGenStatus === 'processing' ? 'animate-spin' : ''}`} />
@@ -891,28 +962,52 @@ const SchedulerView = () => {
                                 </div>
                             </div>
 
-                            {/* Courts Assignment Dashboard */}
-                            <div className="bg-slate-900/40 rounded-3xl border border-white/5 p-6 overflow-x-auto custom-scrollbar">
-                                <div className="flex items-center space-x-3 mb-4">
-                                    <LayoutGrid className="w-4 h-4 text-emerald-500" />
-                                    <h3 className="text-xs font-black uppercase text-slate-400 tracking-widest">Live Court Queues</h3>
+                            {/* Courts Assignment Dashboard - Redesigned for Premium High-Density View */}
+                            <div className="bg-[#020617]/40 backdrop-blur-3xl rounded-[2.5rem] border border-white/5 p-8 overflow-hidden shadow-2xl">
+                                <div className="flex items-center justify-between mb-8">
+                                    <div className="flex items-center space-x-4">
+                                        <div className="p-3 bg-emerald-500/10 rounded-2xl border border-emerald-500/20 shadow-lg shadow-emerald-500/5">
+                                            <LayoutGrid className="w-5 h-5 text-emerald-500" />
+                                        </div>
+                                        <div>
+                                            <h3 className="text-sm font-black uppercase text-white tracking-[0.2em] italic">Live Court Queues</h3>
+                                            <p className="text-slate-500 text-[9px] font-bold uppercase tracking-widest mt-1 opacity-60">Real-time Allocation & Status</p>
+                                        </div>
+                                    </div>
+                                    <div className="flex items-center space-x-3 px-4 py-2 bg-white/5 rounded-xl border border-white/5">
+                                        <div className="flex items-center space-x-2">
+                                            <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]" />
+                                            <span className="text-[8px] font-black text-slate-500 uppercase tracking-widest">Available</span>
+                                        </div>
+                                        <div className="w-px h-3 bg-white/10" />
+                                        <div className="flex items-center space-x-2">
+                                            <div className="w-1.5 h-1.5 rounded-full bg-rose-500 shadow-[0_0_8px_rgba(244,63,94,0.5)]" />
+                                            <span className="text-[8px] font-black text-slate-500 uppercase tracking-widest">Occupied</span>
+                                        </div>
+                                    </div>
                                 </div>
-                                <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+
+                                <div className="grid grid-cols-2 lg:grid-cols-5 gap-6">
                                     {courtsState.map(c => {
                                         const isMatch1InProgress = c.activeMatchId?.status === 'In Progress';
                                         const isMatch2InProgress = c.upcomingMatchId?.status === 'In Progress';
                                         const isUnavailable = c.status === 'Unavailable';
 
                                         return (
-                                            <div key={c.courtId} className={`relative p-4 rounded-2xl border transition-all duration-500 ${isUnavailable ? 'bg-slate-900/80 border-rose-500/30' : 'bg-slate-900/40 border-white/10 hover:border-amber-500/30'}`}>
-                                                <div className="flex items-center justify-between mb-3 border-b border-white/5 pb-2">
-                                                    <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Court {c.courtId}</span>
-                                                    <div className={`w-2 h-2 rounded-full shadow-lg ${isUnavailable ? 'bg-rose-500 animate-pulse shadow-rose-500/20' : 'bg-emerald-500 shadow-emerald-500/20'}`} />
-                                                </div>
+                                            <div key={c.courtId} className={`group relative p-1 rounded-3xl border transition-all duration-700 ${isUnavailable ? 'bg-rose-500/5 border-rose-500/20' : 'bg-slate-900/40 border-white/5 hover:border-white/20 hover:bg-slate-900/60 shadow-xl'}`}>
+                                                <div className="p-4 space-y-4">
+                                                    <div className="flex items-center justify-between">
+                                                        <div className="flex items-center space-x-2">
+                                                            <span className="text-[10px] font-black text-slate-400 uppercase tracking-tighter">Court</span>
+                                                            <span className="text-lg font-black text-white italic leading-none">{String(c.courtId).padStart(2, '0')}</span>
+                                                        </div>
+                                                        <div className={`w-2 h-2 rounded-full transition-all duration-500 ${isUnavailable ? 'bg-rose-500 animate-pulse shadow-[0_0_12px_rgba(244,63,94,0.4)]' : 'bg-emerald-500 shadow-[0_0_12px_rgba(16,185,129,0.4)]'}`} />
+                                                    </div>
 
-                                                <div className="space-y-4">
-                                                    <CourtSlot match={c.activeMatchId} type="Active" isLive={isMatch1InProgress} />
-                                                    <CourtSlot match={c.upcomingMatchId} type="Next" isLive={isMatch2InProgress} />
+                                                    <div className="space-y-2">
+                                                        <CourtSlot match={c.activeMatchId} type="Active" isLive={isMatch1InProgress} />
+                                                        <CourtSlot match={c.upcomingMatchId} type="Next" isLive={isMatch2InProgress} />
+                                                    </div>
                                                 </div>
                                             </div>
                                         );
@@ -923,7 +1018,7 @@ const SchedulerView = () => {
                             <div id="bracket-view-container" className="relative min-h-[600px] bg-slate-900/20 rounded-[3rem] border border-white/5 p-6 lg:p-8 overflow-x-auto custom-scrollbar mt-6">
                                 {bracketMatches.length > 0 ? (
                                     selectedCategory.startsWith('RR_') ? (
-                                        <RoundRobinTableView 
+                                        <RoundRobinTableView
                                             matches={bracketMatches}
                                             categoryId={selectedCategory}
                                             onUpdate={() => fetchBracket(selectedCategory)}
@@ -954,6 +1049,14 @@ const SchedulerView = () => {
                         </motion.div>
                     )}
                 </AnimatePresence>
+                <ImportDataModal 
+                    isOpen={isImportModalOpen} 
+                    onClose={() => setIsImportModalOpen(false)} 
+                    onUpload={(e, type) => {
+                        handleFileUpload(e, type);
+                        // Optional: Keep open or close? User usually wants to upload one after another.
+                    }}
+                />
             </main>
 
             {loading && (
@@ -1003,7 +1106,7 @@ const SchedulerView = () => {
                 />
             )}
 
-            <RoundRobinSetupModal 
+            <RoundRobinSetupModal
                 isOpen={isRRModalOpen}
                 onClose={() => setIsRRModalOpen(false)}
                 onGenerate={handleRRGenerated}
@@ -1032,7 +1135,7 @@ const SchedulerView = () => {
                 />
             )}
 
-            <ConfirmModal 
+            <ConfirmModal
                 isOpen={confirm.open}
                 title={confirm.title}
                 message={confirm.message}
@@ -1046,9 +1149,10 @@ const SchedulerView = () => {
 
 const EditMatchModal = ({ match, onClose, onSave, participants, courts }) => {
     const [teams, setTeams] = useState(() => {
-        if (match.participation) return match.participation;
-        // If match.teams exists and contains strings (IDs), use it. 
-        if (match.teams && typeof match.teams.team1 === 'string') return match.teams;
+        if (match.teams?.team1?.participationId) return {
+            team1: match.teams.team1.participationId,
+            team2: match.teams.team2?.participationId || null
+        };
         return { team1: null, team2: null };
     });
     const [params, setParams] = useState({
@@ -1082,7 +1186,7 @@ const EditMatchModal = ({ match, onClose, onSave, participants, courts }) => {
             const res = await fetch(`${CONFIG.BACKEND_URL}/api/scheduler/match/${match._id}`, {
                 method: 'PATCH',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ participation: teams, parameters: params, courtId })
+                body: JSON.stringify({ teams: teams, parameters: params, courtId })
             });
             const json = await res.json();
             if (json.success) {
@@ -1243,8 +1347,8 @@ const ForfeitMatchModal = ({ match, onClose, onConfirm, participants }) => {
         return found.player1 + (found.player2 !== '-' ? ` / ${found.player2}` : '');
     };
 
-    const team1Name = match.team1Name || getTeamLabel(match.participation?.team1);
-    const team2Name = match.team2Name || getTeamLabel(match.participation?.team2);
+    const team1Name = match.teams?.team1?.players?.map(p => p.fullName).join(' / ') || getTeamLabel(match.teams?.team1?.participationId);
+    const team2Name = match.teams?.team2?.players?.map(p => p.fullName).join(' / ') || getTeamLabel(match.teams?.team2?.participationId);
 
     return (
         <div className="fixed inset-0 z-[120] flex items-center justify-center p-4">
@@ -1264,7 +1368,7 @@ const ForfeitMatchModal = ({ match, onClose, onConfirm, participants }) => {
 
                             <div className="space-y-4">
                                 <button
-                                    onClick={() => setSelectedForfeit(1)}
+                                    onClick={() => setSelectedForfeit('team1')}
                                     className="w-full bg-slate-800 hover:bg-rose-500/20 border border-white/5 hover:border-rose-500/50 p-4 rounded-xl text-white transition-all group flex flex-col items-center gap-1"
                                 >
                                     <span className="text-[9px] font-black uppercase tracking-widest opacity-40 group-hover:opacity-100 italic">Select Forfeiture</span>
@@ -1272,7 +1376,7 @@ const ForfeitMatchModal = ({ match, onClose, onConfirm, participants }) => {
                                 </button>
 
                                 <button
-                                    onClick={() => setSelectedForfeit(2)}
+                                    onClick={() => setSelectedForfeit('team2')}
                                     className="w-full bg-slate-800 hover:bg-rose-500/20 border border-white/5 hover:border-rose-500/50 p-4 rounded-xl text-white transition-all group flex flex-col items-center gap-1"
                                 >
                                     <span className="text-[9px] font-black uppercase tracking-widest opacity-40 group-hover:opacity-100 italic">Select Forfeiture</span>
@@ -1284,9 +1388,9 @@ const ForfeitMatchModal = ({ match, onClose, onConfirm, participants }) => {
                         <motion.div key="step2" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} className="space-y-6">
                             <h3 className="text-xl font-black uppercase text-rose-500 mb-2">Double Confirmation</h3>
                             <p className="text-slate-400 text-[10px] font-bold uppercase tracking-widest leading-loose">
-                                Are you sure <span className="text-white">{selectedForfeit === 1 ? team1Name : team2Name}</span> is forfeiting?
+                                Are you sure <span className="text-white">{selectedForfeit === 'team1' ? team1Name : team2Name}</span> is forfeiting?
                                 <br />
-                                <span className="text-emerald-500">{selectedForfeit === 1 ? team2Name : team1Name}</span> will be declared the winner.
+                                <span className="text-emerald-500">{selectedForfeit === 'team1' ? team2Name : team1Name}</span> will be declared the winner.
                             </p>
 
                             <div className="pt-4 space-y-3">
@@ -1358,21 +1462,44 @@ const BracketLayer = ({ matches, onUpdate, catId, onEdit, onForfeit, highlighted
     );
 };
 
-const CourtSlot = ({ match, type, isLive }) => (
-    <div className={`bg-slate-950/50 p-3 rounded-xl border border-white/5 border-l-2 flex flex-col justify-center min-h-[54px] ${isLive ? 'border-l-rose-500 shadow-[0_0_15px_rgba(244,63,94,0.1)]' : 'border-l-slate-700'}`}>
-        <span className={`text-[8px] uppercase font-black tracking-widest mb-1 ${isLive ? 'text-rose-400 animate-pulse' : 'text-slate-500'}`}>
-            {type} Match
-        </span>
-        {match ? (
-            <div className="flex flex-col">
-                <span className="text-[10px] text-amber-500 font-bold truncate">{match.roundName} - Match {match.matchIndex + 1}</span>
-                <span className="text-[9px] text-slate-300 truncate opacity-80">{match.team1Name} vs {match.team2Name}</span>
+const CourtSlot = ({ match, type, isLive }) => {
+    const hasPlayers = match?.teams?.team1?.players?.length > 0 || match?.teams?.team2?.players?.length > 0;
+    const team1Name = match?.teams?.team1?.players?.map(p => p.firstName || p.fullName.split(' ')[0]).join('/') || 'TBD';
+    const team2Name = match?.teams?.team2?.players?.map(p => p.firstName || p.fullName.split(' ')[0]).join('/') || 'TBD';
+    const slotLabel = type === 'Active' ? 'S1' : 'S2';
+
+    return (
+        <div className={`group/slot flex items-center space-x-3 p-2 rounded-xl border transition-all duration-500 
+            ${isLive ? 'bg-rose-500/10 border-rose-500/30 shadow-[0_0_15px_rgba(244,63,94,0.1)]' : match ? 'bg-white/5 border-white/5 hover:bg-white/10' : 'bg-emerald-500/5 border-emerald-500/10'}`}>
+
+            <div className={`w-6 h-6 rounded-lg flex items-center justify-center text-[9px] font-black shrink-0 transition-all duration-500
+                ${isLive ? 'bg-rose-500 text-white animate-pulse shadow-[0_0_10px_rgba(244,63,94,0.4)]' : match ? 'bg-slate-800 text-slate-500 border border-white/5' : 'bg-emerald-500/20 text-emerald-500 border border-emerald-500/10'}`}>
+                {slotLabel}
             </div>
-        ) : (
-            <span className="text-[9px] text-slate-700 italic font-bold">Slot Available</span>
-        )}
-    </div>
-);
+
+            <div className="flex-1 min-w-0 flex flex-col justify-center">
+                {match && hasPlayers ? (
+                    <>
+                        <div className="flex items-center justify-between mb-0.5">
+                            <span className="text-[9px] font-black text-amber-500 truncate tracking-tight leading-none uppercase italic">{team1Name} vs {team2Name}</span>
+                        </div>
+                        <div className="flex items-center space-x-2">
+                            <span className="text-[7px] text-slate-500 font-black uppercase tracking-widest leading-none">#{(match.matchIndex || 0) + 1}</span>
+                            {isLive && <span className="w-1 h-1 rounded-full bg-rose-500 animate-ping" />}
+                        </div>
+                    </>
+                ) : (
+                    <div className="flex items-center justify-between">
+                        <span className={`text-[9px] font-black uppercase tracking-[0.2em] leading-none ${match ? 'text-rose-500/60' : 'text-emerald-500/60'}`}>
+                            {match ? 'Occupied' : 'Available'}
+                        </span>
+                        {match && !hasPlayers && <span className="text-[7px] text-slate-600 font-bold italic uppercase tracking-tighter">Waiting</span>}
+                    </div>
+                )}
+            </div>
+        </div>
+    );
+};
 
 const BracketConnectors = ({ sortedRounds, roundsMap }) => {
     return (
@@ -1434,8 +1561,8 @@ const ConnectorLine = ({ startId, endId }) => {
 // BracketCard and MatchStatusBadge were moved to src/components/BracketCard.jsx
 
 const TabButton = ({ id, active, set, label, icon: Icon }) => (
-    <button 
-        onClick={() => set(id)} 
+    <button
+        onClick={() => set(id)}
         className={'flex flex-col items-center justify-center space-y-1 pb-4 transition-colors relative w-full cursor-pointer ' + (active === id ? 'text-white' : 'text-slate-600 hover:text-slate-400')}
     >
         <Icon className={'w-4 h-4 ' + (active === id ? 'text-amber-500' : '')} />
@@ -1574,7 +1701,7 @@ const DataTable = ({ data, search, setSearch }) => {
                         {sortedData.length > 0 ? (sortedData.map((item, idx) => (
                             <tr key={idx} className="hover:bg-white/5 transition-colors group">
                                 <td className="px-6 py-4 text-xs font-mono text-slate-600">{idx + 1}</td>
-                                <td className="px-6 py-4"><span className="px-3 py-1 rounded-full bg-amber-500/10 text-amber-500 text-[10px] font-bold border border-amber-500/20">{item.categoryName}</span></td>
+                                <td className="px-6 py-4"><span className={`px-3 py-1 rounded-full ${getCategoryColor(item.categoryName).bg} ${getCategoryColor(item.categoryName).text} text-[10px] font-bold border ${getCategoryColor(item.categoryName).border}`}>{item.categoryName}</span></td>
                                 <td className="px-6 py-4 text-sm font-semibold text-slate-200">{item.player1}</td>
                                 <td className="px-6 py-4 text-sm text-slate-400 italic">{item.player2 !== '-' ? item.player2 : <span className="text-slate-700 not-italic">Singles</span>}</td>
                             </tr>
@@ -1588,23 +1715,62 @@ const DataTable = ({ data, search, setSearch }) => {
     );
 };
 
-const ResultsView = ({ data, loading }) => {
+const ResultsView = ({ data, completedMatches, loading }) => {
+    const [subTab, setSubTab] = useState('matches'); // 'standings' or 'matches'
+    const [search, setSearch] = useState('');
+
+    const filteredStandings = data.filter(row => 
+        row.categoryName?.toLowerCase().includes(search.toLowerCase()) ||
+        row.winner?.toLowerCase().includes(search.toLowerCase()) ||
+        row.runnerUp?.toLowerCase().includes(search.toLowerCase())
+    );
+
+    const filteredMatches = completedMatches.filter(m => {
+        const query = search.toLowerCase();
+        return (
+            m.categoryName?.toLowerCase().includes(query) ||
+            m.roundName?.toLowerCase().includes(query) ||
+            m.teams?.team1?.players?.some(p => p.fullName.toLowerCase().includes(query)) ||
+            m.teams?.team2?.players?.some(p => p.fullName.toLowerCase().includes(query))
+        );
+    });
+
     const handleExportCSV = () => {
-        const csvData = data.map((row, idx) => ({
-            'S.No': idx + 1,
-            'Category': row.categoryName,
-            'Winner': row.winner,
-            'Runner Up': row.runnerUp,
-            'Semi Finalist 1': row.semi1,
-            'Semi Finalist 2': row.semi2
-        }));
+        const sourceData = subTab === 'standings' ? filteredStandings : filteredMatches;
+        const csvData = subTab === 'standings' 
+            ? sourceData.map((row, idx) => ({
+                'S.No': idx + 1,
+                'Category': row.categoryName,
+                'Winner': row.winner,
+                'Runner Up': row.runnerUp,
+                'Semi Finalist 1': row.semi1,
+                'Semi Finalist 2': row.semi2
+            }))
+            : sourceData.map((m, idx) => {
+                const team1 = m.teams?.team1?.players?.map(p => p.fullName).join(' / ') || 'TBD';
+                const team2 = m.teams?.team2?.players?.map(p => p.fullName).join(' / ') || 'TBD';
+                const winnerName = m.winner === 'team1' ? team1 : team2;
+                const loserName = m.winner === 'team1' ? team2 : team1;
+                const gameScore = `${m.games?.filter(g => g.status === 'Completed' && g.scores?.team1 > g.scores?.team2).length} - ${m.games?.filter(g => g.status === 'Completed' && g.scores?.team2 > g.scores?.team1).length}`;
+                const pointScore = m.games?.map(g => `${g.scores?.team1}-${g.scores?.team2}`).join(', ');
+
+                return {
+                    'S.No': idx + 1,
+                    'Category': m.categoryName,
+                    'Round': m.roundName,
+                    'Winner': winnerName,
+                    'Loser': loserName,
+                    'Game Score': gameScore,
+                    'Point Score': pointScore
+                };
+            });
 
         const csv = Papa.unparse(csvData);
         const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
         const link = document.createElement('a');
         const url = URL.createObjectURL(blob);
         link.setAttribute('href', url);
-        link.setAttribute('download', `tournament_results_${new Date().toISOString().split('T')[0]}.csv`);
+        link.setAttribute('download', `tournament_${subTab}_${new Date().toISOString().split('T')[0]}.csv`);
         link.style.visibility = 'hidden';
         document.body.appendChild(link);
         link.click();
@@ -1612,63 +1778,191 @@ const ResultsView = ({ data, loading }) => {
     };
 
     return (
-        <motion.div key="results" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="space-y-8">
-            <div className="bg-slate-900/40 rounded-3xl border border-white/5 p-8">
-                <div className="flex flex-col md:flex-row items-center justify-between mb-8 gap-4">
-                    <div>
-                        <h3 className="text-xl font-black text-white uppercase tracking-wider">Tournament Results</h3>
-                        <p className="text-slate-500 text-[10px] font-bold uppercase tracking-widest mt-1">Final standings for all categories</p>
+        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="space-y-8">
+            <div className="bg-slate-900/40 rounded-[2.5rem] border border-white/5 p-8 shadow-2xl overflow-hidden relative">
+                <div className="flex flex-col lg:flex-row items-center justify-between mb-10 gap-8">
+                    {/* Left: Branding */}
+                    <div className="flex items-center space-x-6 min-w-[280px]">
+                        <div className="p-4 bg-amber-500/10 rounded-[2rem] border border-amber-500/20 shadow-xl shadow-amber-500/5">
+                            <Trophy className="w-8 h-8 text-amber-500" />
+                        </div>
+                        <div>
+                            <h3 className="text-2xl font-black text-white uppercase tracking-tighter italic leading-none">Tournament Registry</h3>
+                            <p className="text-slate-500 text-[10px] font-bold uppercase tracking-widest mt-2 opacity-60">Verified Records & Standings</p>
+                        </div>
                     </div>
-                    <button
-                        onClick={handleExportCSV}
-                        className="flex items-center space-x-2 bg-emerald-600 hover:bg-emerald-500 text-white px-6 py-3 rounded-2xl transition-all shadow-lg shadow-emerald-600/10 uppercase tracking-widest text-[10px] font-black cursor-pointer"
-                    >
-                        <FileSpreadsheet className="w-4 h-4" />
-                        <span>Export Results CSV</span>
-                    </button>
+
+                    {/* Middle: Sub-Tabs */}
+                    <div className="flex items-center space-x-2 bg-slate-950/60 p-1.5 rounded-2xl border border-white/5 shadow-inner">
+                        <button 
+                            onClick={() => setSubTab('standings')}
+                            className={`px-6 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all duration-300 ${subTab === 'standings' ? 'bg-amber-500 text-slate-900 shadow-lg shadow-amber-500/20' : 'text-slate-500 hover:text-white hover:bg-white/5'}`}
+                        >
+                            Category Winners
+                        </button>
+                        <button 
+                            onClick={() => setSubTab('matches')}
+                            className={`px-6 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all duration-300 ${subTab === 'matches' ? 'bg-amber-500 text-slate-900 shadow-lg shadow-amber-500/20' : 'text-slate-500 hover:text-white hover:bg-white/5'}`}
+                        >
+                            Match Ledger
+                        </button>
+                    </div>
+
+                    {/* Right: Actions (Search + Export) */}
+                    <div className="flex items-center justify-end space-x-4 min-w-[400px]">
+                        <div className="relative group flex-1">
+                            <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500 group-focus-within:text-amber-500 transition-colors" />
+                            <input 
+                                type="text"
+                                placeholder={`Search ${subTab === 'standings' ? 'winners' : 'ledger'}...`}
+                                value={search}
+                                onChange={(e) => setSearch(e.target.value)}
+                                className="bg-slate-950/40 border border-white/5 rounded-xl py-3 pl-12 pr-6 text-xs text-white placeholder:text-slate-600 focus:outline-none focus:border-amber-500/50 focus:ring-4 focus:ring-amber-500/5 w-full transition-all"
+                            />
+                        </div>
+                        
+                        <button
+                            onClick={handleExportCSV}
+                            className="flex items-center space-x-2 bg-emerald-600/10 hover:bg-emerald-600/20 text-emerald-500 border border-emerald-500/20 px-6 py-3 rounded-xl transition-all uppercase tracking-widest text-[10px] font-black shrink-0 shadow-lg shadow-emerald-500/5"
+                        >
+                            <FileSpreadsheet className="w-4 h-4" />
+                            <span>Export CSV</span>
+                        </button>
+                    </div>
                 </div>
 
-                <div className="overflow-hidden rounded-2xl border border-white/5 bg-slate-950/20">
+                <div className="overflow-hidden rounded-[2rem] border border-white/5 bg-slate-950/20 backdrop-blur-xl">
                     <table className="w-full text-left border-collapse">
                         <thead>
                             <tr className="bg-slate-900/50">
-                                <th className="px-8 py-4 text-[11px] font-black text-slate-500 uppercase tracking-[0.2em]">S.No</th>
-                                <th className="px-8 py-4 text-[11px] font-black text-slate-500 uppercase tracking-[0.2em]">Category</th>
-                                <th className="px-8 py-4 text-[11px] font-black text-slate-500 uppercase tracking-[0.2em]">Winner</th>
-                                <th className="px-8 py-4 text-[11px] font-black text-slate-500 uppercase tracking-[0.2em]">Runner Up</th>
-                                <th className="px-8 py-4 text-[11px] font-black text-slate-500 uppercase tracking-[0.2em]">Semi Finalists</th>
+                                <th className="px-8 py-5 text-[10px] font-black text-slate-500 uppercase tracking-[0.2em] w-16 text-center border-b border-white/5">#</th>
+                                {subTab === 'standings' ? (
+                                    <>
+                                        <th className="px-8 py-5 text-[10px] font-black text-slate-500 uppercase tracking-[0.2em] border-b border-white/5">Category</th>
+                                        <th className="px-8 py-5 text-[10px] font-black text-slate-500 uppercase tracking-[0.2em] border-b border-white/5">Winner</th>
+                                        <th className="px-8 py-5 text-[10px] font-black text-slate-500 uppercase tracking-[0.2em] border-b border-white/5">Runner Up</th>
+                                        <th className="px-8 py-5 text-[10px] font-black text-slate-500 uppercase tracking-[0.2em] border-b border-white/5">Semi Finalists</th>
+                                    </>
+                                ) : (
+                                    <>
+                                        <th className="px-8 py-5 text-[10px] font-black text-slate-500 uppercase tracking-[0.2em] border-b border-white/5">Category / Round</th>
+                                        <th className="px-8 py-5 text-[10px] font-black text-slate-500 uppercase tracking-[0.2em] border-b border-white/5 text-emerald-500">Won</th>
+                                        <th className="px-8 py-5 text-[10px] font-black text-slate-500 uppercase tracking-[0.2em] border-b border-white/5 text-rose-500">Lost</th>
+                                        <th className="px-8 py-5 text-[10px] font-black text-slate-500 uppercase tracking-[0.2em] border-b border-white/5 text-center">Final Score</th>
+                                    </>
+                                )}
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-white/5">
-                            {data.length > 0 ? (
-                                data.map((row, idx) => (
-                                    <tr key={row.categoryId} className="hover:bg-white/5 transition-colors group">
-                                        <td className="px-8 py-6 text-slate-500 font-mono text-xs">{idx + 1}</td>
-                                        <td className="px-8 py-6">
-                                            <span className="text-sm font-bold text-white uppercase tracking-wide">{row.categoryName}</span>
-                                        </td>
-                                        <td className="px-8 py-6">
-                                            <div className="flex items-center space-x-2">
-                                                <Trophy className="w-4 h-4 text-amber-500" />
-                                                <span className="text-sm font-black text-amber-400 uppercase">{row.winner}</span>
-                                            </div>
-                                        </td>
-                                        <td className="px-8 py-6 text-sm font-bold text-slate-300 uppercase">{row.runnerUp}</td>
-                                        <td className="px-8 py-6">
-                                            <div className="flex flex-col space-y-1">
-                                                <span className="text-xs text-slate-500 font-bold uppercase">{row.semi1 !== '-' ? row.semi1 : ''}</span>
-                                                <span className="text-xs text-slate-500 font-bold uppercase">{row.semi2 !== '-' ? row.semi2 : ''}</span>
-                                                {row.semi1 === '-' && row.semi2 === '-' && <span className="text-xs text-slate-700 italic">None</span>}
+                            {subTab === 'standings' ? (
+                                filteredStandings.length > 0 ? (
+                                    filteredStandings.map((row, idx) => (
+                                        <tr key={row.categoryId} className="hover:bg-white/5 transition-colors group">
+                                            <td className="px-8 py-6 text-slate-500 font-mono text-[10px] text-center">{idx + 1}</td>
+                                            <td className="px-8 py-6">
+                                                <span className={`text-xs font-black ${getCategoryColor(row.categoryName).text} uppercase tracking-wider italic`}>{row.categoryName}</span>
+                                            </td>
+                                            <td className="px-8 py-6">
+                                                <div className="flex items-center space-x-3">
+                                                    <div className={`p-1.5 ${getCategoryColor(row.categoryName).bg} rounded-lg border ${getCategoryColor(row.categoryName).border}`}>
+                                                        <Trophy className={`w-3.5 h-3.5 ${getCategoryColor(row.categoryName).text}`} />
+                                                    </div>
+                                                    <span className={`text-sm font-black ${getCategoryColor(row.categoryName).text} uppercase tracking-tight`}>{row.winner}</span>
+                                                </div>
+                                            </td>
+                                            <td className="px-8 py-6 text-sm font-bold text-slate-300 uppercase tracking-tight opacity-80">{row.runnerUp}</td>
+                                            <td className="px-8 py-6">
+                                                <div className="flex flex-col space-y-1.5">
+                                                    <span className="text-[10px] text-slate-500 font-black uppercase tracking-widest">{row.semi1 !== '-' ? row.semi1 : ''}</span>
+                                                    <span className="text-[10px] text-slate-500 font-black uppercase tracking-widest">{row.semi2 !== '-' ? row.semi2 : ''}</span>
+                                                    {row.semi1 === '-' && row.semi2 === '-' && <span className="text-[10px] text-slate-800 italic font-black uppercase">None</span>}
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    ))
+                                ) : (
+                                    <tr>
+                                        <td colSpan="5" className="px-8 py-32 text-center">
+                                            <div className="flex flex-col items-center justify-center space-y-4 opacity-20">
+                                                <Trophy className="w-16 h-16" />
+                                                <p className="text-[10px] font-black uppercase tracking-[0.3em]">{loading ? "Synchronizing Standings..." : "No Champions Recorded"}</p>
                                             </div>
                                         </td>
                                     </tr>
-                                ))
+                                )
                             ) : (
-                                <tr>
-                                    <td colSpan="5" className="px-8 py-20 text-center text-slate-600 text-sm italic font-bold uppercase tracking-widest">
-                                        {loading ? "Loading results..." : "No results available yet. Complete tournament matches to see standings."}
-                                    </td>
-                                </tr>
+                                filteredMatches.length > 0 ? (
+                                    filteredMatches.map((m, idx) => {
+                                        const team1 = m.teams?.team1?.players?.map(p => p.fullName).join(' / ') || 'TBD';
+                                        const team2 = m.teams?.team2?.players?.map(p => p.fullName).join(' / ') || 'TBD';
+                                        const winnerName = m.winner === 'team1' ? team1 : team2;
+                                        const loserName = m.winner === 'team1' ? team2 : team1;
+                                        const isForfeit = m.status === 'Forfeited';
+                                        
+                                        const gameWins1 = m.games?.filter(g => g.status === 'Completed' && g.scores?.team1 > g.scores?.team2).length || 0;
+                                        const gameWins2 = m.games?.filter(g => g.status === 'Completed' && g.scores?.team2 > g.scores?.team1).length || 0;
+                                        const gameScoreStr = m.winner === 'team1' ? `${gameWins1} - ${gameWins2}` : `${gameWins2} - ${gameWins1}`;
+
+                                        return (
+                                            <tr key={m._id} className="hover:bg-white/5 transition-colors group border-b border-white/5 last:border-0">
+                                                <td className="px-6 py-3 text-xs font-mono text-slate-600 text-center">{idx + 1}</td>
+                                                <td className="px-6 py-3">
+                                                    <div className="flex flex-col space-y-1">
+                                                        <div className="flex items-center space-x-2">
+                                                            <span className={`px-3 py-1 rounded-full ${getCategoryColor(m.categoryName).bg} ${getCategoryColor(m.categoryName).text} text-[10px] font-bold border ${getCategoryColor(m.categoryName).border} uppercase tracking-wider`}>{m.categoryName}</span>
+                                                        </div>
+                                                        <span className="text-[9px] font-bold text-slate-500 uppercase tracking-tighter opacity-60 italic px-1">{m.roundName}</span>
+                                                    </div>
+                                                </td>
+                                                <td className="px-6 py-3">
+                                                    <div className="flex flex-col">
+                                                        <span className="text-sm font-semibold text-emerald-400 uppercase tracking-tight">{winnerName}</span>
+                                                    </div>
+                                                </td>
+                                                <td className="px-6 py-3">
+                                                    <span className="text-sm font-semibold text-slate-400 uppercase tracking-tight opacity-60">{loserName}</span>
+                                                </td>
+                                                <td className="px-6 py-3">
+                                                    <div className="flex flex-col items-center justify-center space-y-1">
+                                                        <div className={`${isForfeit ? 'bg-rose-500/10 border-rose-500/20 text-rose-500' : 'bg-amber-500/10 border-amber-500/20 text-amber-500'} px-3 py-1 rounded-lg border min-w-[60px] flex items-center justify-center`}>
+                                                            <span className="text-xs font-black tracking-widest leading-none">{isForfeit ? 'FORFEIT' : gameScoreStr}</span>
+                                                        </div>
+                                                        {!isForfeit && (
+                                                            <div className="flex items-center space-x-1.5">
+                                                                {m.games?.map((g, gi) => {
+                                                                    const t1Wins = g.scores?.team1 > g.scores?.team2;
+                                                                    const displayWinnerSide = m.winner === 'team1';
+                                                                    
+                                                                    // We want to highlight the winner of THIS game
+                                                                    const s1 = displayWinnerSide ? g.scores?.team1 : g.scores?.team2;
+                                                                    const s2 = displayWinnerSide ? g.scores?.team2 : g.scores?.team1;
+                                                                    const s1Wins = s1 > s2;
+
+                                                                    return (
+                                                                        <div key={gi} className="text-[9px] font-black tabular-nums bg-white/5 px-2 py-0.5 rounded border border-white/5 flex items-center space-x-1">
+                                                                            <span className={s1Wins ? 'text-emerald-400' : 'text-slate-500'}>{s1}</span>
+                                                                            <span className="text-slate-700">-</span>
+                                                                            <span className={!s1Wins ? 'text-emerald-400' : 'text-slate-500'}>{s2}</span>
+                                                                        </div>
+                                                                    );
+                                                                })}
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                        );
+                                    })
+                                ) : (
+                                    <tr>
+                                        <td colSpan="5" className="px-8 py-32 text-center">
+                                            <div className="flex flex-col items-center justify-center space-y-4 opacity-20">
+                                                <FileSpreadsheet className="w-16 h-16" />
+                                                <p className="text-[10px] font-black uppercase tracking-[0.3em]">{search ? "No matches match your criteria" : "Match Ledger is empty"}</p>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                )
                             )}
                         </tbody>
                     </table>
@@ -1684,7 +1978,7 @@ const BulkGenerationModal = ({ status, results, onClose }) => {
 
     return (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/80 backdrop-blur-md">
-            <motion.div 
+            <motion.div
                 initial={{ opacity: 0, scale: 0.9 }}
                 animate={{ opacity: 1, scale: 1 }}
                 className="bg-slate-900 border border-white/10 w-full max-w-2xl rounded-[2.5rem] shadow-2xl overflow-hidden flex flex-col max-h-[80vh]"
@@ -1799,6 +2093,64 @@ const SimulationView = ({ n, setN, onRun, matches, loading }) => {
                 )}
             </div>
         </motion.div>
+    );
+};
+
+// [EXPERIMENTAL] Data Import Modal
+const ImportDataModal = ({ isOpen, onClose, onUpload }) => {
+    if (!isOpen) return null;
+
+    return (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/80 backdrop-blur-md">
+            <motion.div
+                initial={{ opacity: 0, scale: 0.9 }}
+                animate={{ opacity: 1, scale: 1 }}
+                className="bg-slate-900 border border-white/10 w-full max-w-4xl rounded-[2.5rem] shadow-2xl overflow-hidden flex flex-col"
+            >
+                <div className="p-8 border-b border-white/5 bg-slate-950/40 flex items-center justify-between">
+                    <div className="flex items-center space-x-4">
+                        <div className="p-3 bg-amber-500/10 rounded-2xl text-amber-500">
+                            <Upload className="w-6 h-6" />
+                        </div>
+                        <div>
+                            <h3 className="text-xl font-black text-white uppercase tracking-tighter">Import Tournament Data</h3>
+                            <p className="text-slate-500 text-[10px] font-bold uppercase tracking-widest mt-1">Upload CSV files to synchronize records</p>
+                        </div>
+                    </div>
+                    <button 
+                        onClick={onClose}
+                        className="px-6 py-2.5 rounded-xl bg-white/5 hover:bg-white/10 text-white text-[10px] font-black uppercase tracking-widest transition-all"
+                    >
+                        Close
+                    </button>
+                </div>
+
+                <div className="p-10 grid grid-cols-1 md:grid-cols-3 gap-8">
+                    <UploadSection 
+                        title="Match Categories" 
+                        description="Upload ID & Category Mapping" 
+                        onUpload={(e) => { onUpload(e, 'categories'); }} 
+                        color="blue" 
+                    />
+                    <UploadSection 
+                        title="Player Profiles" 
+                        description="Upload Profile IDs & Names" 
+                        onUpload={(e) => { onUpload(e, 'players'); }} 
+                        color="purple" 
+                    />
+                    <UploadSection 
+                        title="Match Participation" 
+                        description="Link Categories & Team Members" 
+                        onUpload={(e) => { onUpload(e, 'participation'); }} 
+                        color="emerald" 
+                    />
+                </div>
+                
+                <div className="p-8 bg-slate-950/20 border-t border-white/5 text-center">
+                    <p className="text-[10px] text-slate-600 font-bold uppercase tracking-[0.2em]">Ensure your CSV headers match the required tournament schema</p>
+                </div>
+            </motion.div>
+        </div>
     );
 };
 

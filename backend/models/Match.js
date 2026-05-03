@@ -4,7 +4,7 @@ const GameSchema = new mongoose.Schema({
   gameNumber: { type: Number, required: true },
   durationMins: { type: Number, default: 0 },
   status: { type: String, enum: ['In Progress', 'Completed'], default: 'In Progress' },
-  accumulatedScores: {
+  scores: {
     team1: { type: Number, default: 0 },
     team2: { type: Number, default: 0 }
   },
@@ -30,7 +30,7 @@ const MatchSchema = new mongoose.Schema({
   },
 
   // State populated during Toss
-  tossWinner: { type: String, default: null }, // "1" or "2"
+  tossWinner: { type: String, default: null }, // "team1" or "team2"
   servingPlayer: { type: String, default: null }, // Player profileId
   receivingPlayer: { type: String, default: null }, // Player profileId
   startTime: { type: Date, default: null },
@@ -48,11 +48,8 @@ const MatchSchema = new mongoose.Schema({
   currentGameIsOver: { type: Boolean, default: false },
   
   // Resolution Info
-  matchResult: {
-    winner: { type: String, default: null }, // "1" or "2"
-    finalScore: { type: String, default: null },
-    totalDurationMins: { type: Number, default: 0 }
-  },
+  winner: { type: String, default: null }, // "team1" or "team2"
+
 
   // Link to Bracket System
   tournamentMatchId: { type: mongoose.Schema.Types.ObjectId, ref: 'TournamentMatch', default: null },

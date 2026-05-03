@@ -4,11 +4,11 @@ import { motion, AnimatePresence } from 'framer-motion';
 // Robust Winner Detection Helper
 const checkWinner = (teamId, match) => {
   if (!['Completed', 'Forfeited'].includes(match?.status)) return false;
-  const winnerName = match?.matchResult?.winner;
+  const winnerName = match?.winner;
   if (!winnerName) return false;
 
-  // 1. Check if winner is explicitly "1" or "2"
-  if (winnerName === String(teamId)) return true;
+  // 1. Check if winner is explicitly "team1" or "team2"
+  if (winnerName === `team${teamId}`) return true;
 
   const normalize = (s) => s?.toLowerCase().replace(/\s+/g, ' ').trim() || '';
   const normWinner = normalize(winnerName);
@@ -17,7 +17,7 @@ const checkWinner = (teamId, match) => {
   if (normWinner === `team ${teamId}` || normWinner === `team${teamId}`) return true;
 
   // 3. Check full joined team string
-  const players = match.players?.[`team${teamId}`] || [];
+  const players = match.teams?.[`team${teamId}`]?.players?.map(p => p.fullName) || [];
   const joinedName = normalize(players.join(' / '));
   if (normWinner === joinedName) return true;
 
@@ -70,7 +70,8 @@ const ScoreCardBase = ({ current, isWinningScore, isCurrent, isCompleted, isGame
 
 const LiveScoreDisplay = ({ match, courtId }) => {
   const isCompleted = ['Completed', 'Forfeited'].includes(match?.status);
-  const players = match?.players || { team1: [], team2: [] };
+  const team1Players = match?.teams?.team1?.players?.map(p => p.fullName) || [];
+  const team2Players = match?.teams?.team2?.players?.map(p => p.fullName) || [];
   const team1WinsMatch = checkWinner(1, match);
   const team2WinsMatch = checkWinner(2, match);
   const isStarted = ['In Progress', 'Completed', 'Forfeited'].includes(match?.status);
@@ -88,21 +89,21 @@ const LiveScoreDisplay = ({ match, courtId }) => {
   const getDisplayScore = (idx, tId) => {
     if (!isStarted) return '-';
     const g = games[idx];
-    let score = g?.accumulatedScores?.[`team${tId}`] ?? '-';
+    let score = g?.scores?.[tId] ?? '-';
 
     // Fallback: Real-time scores for the active game
-    if (idx === games.length - 1 && (match?.scores || match?.currentScores)) {
-      const live = match.scores || match.currentScores;
-      score = live[`team${tId}`] ?? score;
+    if (idx === games.length - 1) {
+      const live = match.games?.[match.games.length - 1]?.scores;
+      score = live?.[tId] ?? score;
     }
 
     // Victory Correction: Accurate for Deuce and Golden Point
     if (isCompleted && idx === games.length - 1) {
-      const isWinner = tId === 1 ? team1WinsMatch : team2WinsMatch;
+      const isWinner = tId === 'team1' ? team1WinsMatch : team2WinsMatch;
       if (isWinner && typeof score === 'number') {
-        const oppTId = tId === 1 ? 2 : 1;
-        const live = match.scores || match.currentScores;
-        const oppScore = live ? (live[`team${oppTId}`] ?? 0) : (games[idx]?.accumulatedScores?.[`team${oppTId}`] ?? 0);
+        const oppTId = tId === 'team1' ? 'team2' : 'team1';
+        const live = match.games?.[match.games.length - 1]?.scores;
+        const oppScore = live ? (live[oppTId] ?? 0) : (games[idx]?.scores?.[oppTId] ?? 0);
 
         // Force victory point (at least target, and at least opp + 1)
         return Math.max(score, targetPoints, oppScore + 1);
@@ -120,23 +121,23 @@ const LiveScoreDisplay = ({ match, courtId }) => {
     const goldenTrigger = (match.goldenPointAt && match.goldenPointAt > 0) ? match.goldenPointAt : (target === 21 ? 29 : target === 15 ? 20 : target === 11 ? 14 : target + 3);
     const cap = goldenTrigger + 1;
 
-    const s1 = getDisplayScore(currentGameIndex, 1);
-    const s2 = getDisplayScore(currentGameIndex, 2);
+    const s1 = getDisplayScore(currentGameIndex, 'team1');
+    const s2 = getDisplayScore(currentGameIndex, 'team2');
 
     if (s1 === goldenTrigger && s2 === goldenTrigger) return 'GOLDEN POINT';
 
-    const myScore = teamId === 1 ? s1 : s2;
-    const oppScore = teamId === 1 ? s2 : s1;
+    const myScore = teamId === 'team1' ? s1 : s2;
+    const oppScore = teamId === 'team1' ? s2 : s1;
 
     if (myScore >= target - 1 && myScore > oppScore) {
       const currentGameIndex = games.length - 1;
       const completedGames = games.slice(0, currentGameIndex);
 
-      const team1Wins = completedGames.filter(g => g.accumulatedScores.team1 > g.accumulatedScores.team2).length;
-      const team2Wins = completedGames.filter(g => g.accumulatedScores.team2 > g.accumulatedScores.team1).length;
+      const team1Wins = completedGames.filter(g => g.scores.team1 > g.scores.team2).length;
+      const team2Wins = completedGames.filter(g => g.scores.team2 > g.scores.team1).length;
 
       const threshold = Math.ceil(totalGames / 2);
-      const myWins = teamId === 1 ? team1Wins : team2Wins;
+      const myWins = teamId === 'team1' ? team1Wins : team2Wins;
 
       if (myWins === threshold - 1) return 'MATCH POINT';
       return 'GAME POINT';
@@ -218,7 +219,7 @@ const LiveScoreDisplay = ({ match, courtId }) => {
               <div className="flex flex-col flex-1 min-w-0 pr-[1vw]">
                 <div className="h-[13vh] flex flex-col justify-center relative">
                   <div className="flex flex-col space-y-[0.3vh] overflow-visible">
-                    {(players.team1 || ['TBD']).map((p, i) => (
+                    {(team1Players.length > 0 ? team1Players : ['TBD']).map((p, i) => (
                       <span key={i} className={`font-bold tracking-tight whitespace-nowrap overflow-hidden text-ellipsis text-[clamp(1.2rem,3vh,2rem)] leading-tight ${team1WinsMatch ? 'text-emerald-400' : (isCompleted && !team1WinsMatch) ? 'text-slate-500' : 'text-slate-200'}`}>
                         {p}
                       </span>
@@ -230,14 +231,14 @@ const LiveScoreDisplay = ({ match, courtId }) => {
                       <div className="inline-flex items-center px-[1vw] py-[0.3vh] bg-emerald-500/10 border border-emerald-400/50 rounded text-emerald-400 font-black text-[9px] italic tracking-[0.25em] animate-pulse uppercase whitespace-nowrap">
                         Winner
                       </div>
-                    ) : getPointStatus(1) ? (
-                      <div className={`inline-flex items-center px-[0.8vw] py-[0.3vh] rounded font-black text-[9px] italic tracking-[0.25em] animate-pulse uppercase whitespace-nowrap border ${getPointStatus(1) === 'GOLDEN POINT'
+                    ) : getPointStatus('team1') ? (
+                      <div className={`inline-flex items-center px-[0.8vw] py-[0.3vh] rounded font-black text-[9px] italic tracking-[0.25em] animate-pulse uppercase whitespace-nowrap border ${getPointStatus('team1') === 'GOLDEN POINT'
                         ? 'bg-amber-500/10 border-amber-500/30 text-amber-500'
-                        : getPointStatus(1) === 'GAME POINT'
+                        : getPointStatus('team1') === 'GAME POINT'
                           ? 'bg-cyan-500/10 border-cyan-500/30 text-cyan-400'
                           : 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400'
                         }`}>
-                        {getPointStatus(1)}
+                        {getPointStatus('team1')}
                       </div>
                     ) : null}
                   </div>
@@ -247,8 +248,8 @@ const LiveScoreDisplay = ({ match, courtId }) => {
               <div className="flex items-center space-x-[0.3vw] flex-shrink-0">
                 {gameSlots.map((g, idx) => {
                   const isLastGameInArray = idx === games.length - 1;
-                  const score = getDisplayScore(idx, 1);
-                  const oppScore = getDisplayScore(idx, 2);
+                  const score = getDisplayScore(idx, 'team1');
+                  const oppScore = getDisplayScore(idx, 'team2');
 
                   const goldenTrigger = (match?.goldenPointAt && match?.goldenPointAt > 0) ? match.goldenPointAt : (targetPoints === 21 ? 29 : targetPoints === 15 ? 20 : targetPoints === 11 ? 14 : targetPoints + 3);
                   const cap = goldenTrigger + 1;
@@ -265,7 +266,7 @@ const LiveScoreDisplay = ({ match, courtId }) => {
                       isCompleted={isCompleted}
                       isGameOver={isLastGameInArray && (match?.currentGameIsOver || isSetOver)}
                       isWinningScore={isWinningScore}
-                      teamId={1}
+                      teamId={'team1'}
                     />
                   );
                 })}
@@ -279,7 +280,7 @@ const LiveScoreDisplay = ({ match, courtId }) => {
               <div className="flex flex-col flex-1 min-w-0 pr-[1vw]">
                 <div className="h-[13vh] flex flex-col justify-center relative">
                   <div className="flex flex-col space-y-[0.3vh] overflow-visible">
-                    {(players.team2 || ['TBD']).map((p, i) => (
+                    {(team2Players.length > 0 ? team2Players : ['TBD']).map((p, i) => (
                       <span key={i} className={`font-bold tracking-tight whitespace-nowrap overflow-hidden text-ellipsis text-[clamp(1.2rem,3vh,2rem)] leading-tight ${team2WinsMatch ? 'text-emerald-400' : (isCompleted && !team2WinsMatch) ? 'text-slate-500' : 'text-slate-200'}`}>
                         {p}
                       </span>
@@ -291,14 +292,14 @@ const LiveScoreDisplay = ({ match, courtId }) => {
                       <div className="inline-flex items-center px-[1vw] py-[0.3vh] bg-emerald-500/10 border border-emerald-400/50 rounded text-emerald-400 font-black text-[9px] italic tracking-[0.25em] animate-pulse uppercase whitespace-nowrap">
                         Winner
                       </div>
-                    ) : getPointStatus(2) ? (
-                      <div className={`inline-flex items-center px-[0.8vw] py-[0.3vh] rounded font-black text-[9px] italic tracking-[0.25em] animate-pulse uppercase whitespace-nowrap border ${getPointStatus(2) === 'GOLDEN POINT'
+                    ) : getPointStatus('team2') ? (
+                      <div className={`inline-flex items-center px-[0.8vw] py-[0.3vh] rounded font-black text-[9px] italic tracking-[0.25em] animate-pulse uppercase whitespace-nowrap border ${getPointStatus('team2') === 'GOLDEN POINT'
                         ? 'bg-amber-500/10 border-amber-500/30 text-amber-500'
-                        : getPointStatus(2) === 'GAME POINT'
+                        : getPointStatus('team2') === 'GAME POINT'
                           ? 'bg-cyan-500/10 border-cyan-500/30 text-cyan-400'
                           : 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400'
                         }`}>
-                        {getPointStatus(2)}
+                        {getPointStatus('team2')}
                       </div>
                     ) : null}
                   </div>
@@ -308,8 +309,8 @@ const LiveScoreDisplay = ({ match, courtId }) => {
               <div className="flex items-center space-x-[0.3vw] flex-shrink-0">
                 {gameSlots.map((g, idx) => {
                   const isLastGameInArray = idx === games.length - 1;
-                  const score = getDisplayScore(idx, 2);
-                  const oppScore = getDisplayScore(idx, 1);
+                  const score = getDisplayScore(idx, 'team2');
+                  const oppScore = getDisplayScore(idx, 'team1');
 
                   // Autonomous Set-Over Logic for instantaneous color feedback
                   const goldenTrigger = (match?.goldenPointAt && match?.goldenPointAt > 0) ? match.goldenPointAt : (targetPoints === 21 ? 29 : targetPoints === 15 ? 20 : targetPoints === 11 ? 14 : targetPoints + 3);
@@ -327,7 +328,7 @@ const LiveScoreDisplay = ({ match, courtId }) => {
                       isCompleted={isCompleted}
                       isGameOver={isLastGameInArray && (match?.currentGameIsOver || isSetOver)}
                       isWinningScore={isWinningScore}
-                      teamId={2}
+                      teamId={'team2'}
                     />
                   );
                 })}

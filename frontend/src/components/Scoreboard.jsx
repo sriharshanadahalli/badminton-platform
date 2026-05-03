@@ -10,8 +10,8 @@ const Scoreboard = () => {
   const numGames = match.noOfGames || match.gamesPerMatch || 3;
   const gamesList = Array.from({ length: numGames }, (_, i) => i + 1);
 
-  const team1Label = match.teams?.team1?.players?.map(p => p.firstName).join(' / ') || match.team1Name || 'Team 1';
-  const team2Label = match.teams?.team2?.players?.map(p => p.firstName).join(' / ') || match.team2Name || 'Team 2';
+  const team1Label = match.teams?.team1?.players?.map(p => p.firstName).join(' / ') || 'Team 1';
+  const team2Label = match.teams?.team2?.players?.map(p => p.firstName).join(' / ') || 'Team 2';
 
   const getPointStatus = () => {
     const target = parseInt(match.pointsPerGame, 10);
@@ -22,8 +22,8 @@ const Scoreboard = () => {
 
     const threshold = Math.ceil(numGames / 2);
     const wins = {
-      team1: gameHistory.filter(g => g.winner === 1).length,
-      team2: gameHistory.filter(g => g.winner === 2).length
+      team1: gameHistory.filter(g => g.winner === 'team1').length,
+      team2: gameHistory.filter(g => g.winner === 'team2').length
     };
 
     const s1 = scores.team1;
@@ -136,8 +136,8 @@ const Scoreboard = () => {
             if (history) {
               t1Score = history.scores.team1;
               t2Score = history.scores.team2;
-              isT1Winner = history.winner === 1;
-              isT2Winner = history.winner === 2;
+              isT1Winner = history.winner === 'team1';
+              isT2Winner = history.winner === 'team2';
             }
           } else if (gameNum === currentGame) {
             t1Score = scores.team1;

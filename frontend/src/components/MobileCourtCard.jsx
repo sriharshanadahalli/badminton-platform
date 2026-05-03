@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import io from 'socket.io-client';
+import { motion, AnimatePresence } from 'framer-motion';
 import MobileLiveScoreDisplay from './MobileLiveScoreDisplay';
 import MobileNextMatchDisplay from './MobileNextMatchDisplay';
 import { CONFIG } from '../utils/config';
@@ -10,9 +11,13 @@ const MobileCourtCard = ({ courtId, viewMode }) => {
   const [loading, setLoading] = useState(true);
 
   const [lastMatchData, setLastMatchData] = useState(null);
+  const isFetched = React.useRef(false);
 
   // Sync Live Match & Next Match
   useEffect(() => {
+    if (isFetched.current) return;
+    isFetched.current = true;
+    
     let socket;
     const initLiveSync = async () => {
       try {
@@ -115,9 +120,20 @@ const MobileCourtCard = ({ courtId, viewMode }) => {
             <div className="animate-spin w-8 h-8 border-3 border-amber-500 border-t-transparent rounded-full" />
           </div>
         ) : (
-          viewMode === 'live' ?
-            <MobileLiveScoreDisplay match={displayedLiveMatch} courtId={courtId} /> :
-            <MobileNextMatchDisplay matchConfig={nextMatch} courtId={courtId} />
+          <AnimatePresence mode="wait">
+            <motion.div
+              key={viewMode}
+              initial={{ opacity: 0, x: viewMode === 'live' ? -10 : 10 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: viewMode === 'live' ? 10 : -10 }}
+              transition={{ duration: 0.2 }}
+            >
+              {viewMode === 'live' ?
+                <MobileLiveScoreDisplay match={displayedLiveMatch} courtId={courtId} /> :
+                <MobileNextMatchDisplay matchConfig={nextMatch} courtId={courtId} />
+              }
+            </motion.div>
+          </AnimatePresence>
         )}
       </div>
     </div>

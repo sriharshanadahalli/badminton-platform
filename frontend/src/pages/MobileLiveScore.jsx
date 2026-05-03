@@ -49,38 +49,18 @@ const MobileLiveScore = () => {
 
       {/* Main Content Area - with top padding to account for fixed header (approx 175px) */}
       <main className="flex-1 px-4 pt-[145px] pb-8 max-w-lg mx-auto w-full touch-pan-y">
-        <AnimatePresence mode="wait">
-          <motion.div
-            key={viewMode}
-            initial={{ opacity: 0, x: viewMode === 'live' ? -20 : 20 }}
-            animate={{ opacity: 1, x: 0 }}
-            exit={{ opacity: 0, x: viewMode === 'live' ? 20 : -20 }}
-            transition={{ duration: 0.25, ease: "easeOut" }}
-            drag="x"
-            dragConstraints={{ left: 0, right: 0 }}
-            dragElastic={0.2}
-            onDragEnd={(e, info) => {
-              const swipeThreshold = 50;
-              if (info.offset.x < -swipeThreshold && viewMode === 'live') {
-                setViewMode('upcoming');
-              } else if (info.offset.x > swipeThreshold && viewMode === 'upcoming') {
-                setViewMode('live');
-              }
-            }}
-            className="flex flex-col active:cursor-grabbing"
-          >
-            <div className="flex items-center space-x-2 mt-4 mb-6 ml-1">
-              <ChevronRight className={`w-3 h-3 ${viewMode === 'live' ? 'text-emerald-500' : 'text-amber-500'}`} />
-              <h2 className="text-slate-500 font-bold text-[9px] uppercase tracking-[0.3em]">
-                {viewMode === 'live' ? 'Real-time Match Updates' : 'Schedule of Next Matches'}
-              </h2>
-            </div>
+        <div className="flex flex-col">
+          <div className="flex items-center space-x-2 mt-4 mb-6 ml-1">
+            <ChevronRight className={`w-3 h-3 ${viewMode === 'live' ? 'text-emerald-500' : 'text-amber-500'}`} />
+            <h2 className="text-slate-500 font-bold text-[9px] uppercase tracking-[0.3em]">
+              {viewMode === 'live' ? 'Real-time Match Updates' : 'Schedule of Next Matches'}
+            </h2>
+          </div>
 
-            {courts.map((courtId) => (
-              <MobileCourtCard key={courtId} courtId={courtId} viewMode={viewMode} />
-            ))}
-          </motion.div>
-        </AnimatePresence>
+          {courts.map((courtId) => (
+            <MobileCourtCard key={courtId} courtId={courtId} viewMode={viewMode} />
+          ))}
+        </div>
 
         {/* Bottom Spacing / Simple Line */}
         <footer className="py-12 flex flex-col items-center">

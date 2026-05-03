@@ -10,9 +10,8 @@ const NextMatchDisplay = ({ matchConfig }) => {
   }
 
   // Use full names
-  const participants = matchConfig.players || matchConfig.participants || { team1: [], team2: [] };
-  const team1Names = participants.team1?.join(' / ') || 'TBD';
-  const team2Names = participants.team2?.join(' / ') || 'TBD';
+  const team1Names = matchConfig.teams?.team1?.players?.map(p => p.fullName).join(' / ') || 'TBD';
+  const team2Names = matchConfig.teams?.team2?.players?.map(p => p.fullName).join(' / ') || 'TBD';
 
   return (
     <div className="flex flex-col w-full h-full bg-slate-900/10">

@@ -7,9 +7,23 @@ import BracketCard from './BracketCard';
 const RoundRobinTableView = ({ matches, categoryId, onUpdate, onEdit, onForfeit, highlightedId, setGlobalError }) => {
     const [standings, setStandings] = useState([]);
     const [loadingStandings, setLoadingStandings] = useState(false);
+    const lastFetchRef = React.useRef(null);
+    const isMounted = React.useRef(false);
 
     useEffect(() => {
-        if (categoryId) fetchStandings();
+        isMounted.current = true;
+        return () => { isMounted.current = false; };
+    }, []);
+
+    useEffect(() => {
+        if (!categoryId) return;
+        
+        // Prevent double-fetch if matches and category haven't actually changed meaningfully
+        const fetchKey = `${categoryId}-${JSON.stringify(matches.map(m => m._id + m.status + m.updatedAt))}`;
+        if (lastFetchRef.current === fetchKey) return;
+        lastFetchRef.current = fetchKey;
+
+        fetchStandings();
     }, [categoryId, matches]); // Re-fetch when matches update (scores might have changed)
 
     const fetchStandings = async () => {
@@ -17,7 +31,7 @@ const RoundRobinTableView = ({ matches, categoryId, onUpdate, onEdit, onForfeit,
         try {
             const res = await fetch(`${CONFIG.BACKEND_URL}/api/scheduler/round-robin/standings/${categoryId}`);
             const json = await res.json();
-            if (json.success) {
+            if (isMounted.current && json.success) {
                 // Rank them client-side just in case, but server should handle it
                 const sorted = [...json.data].sort((a, b) => {
                   if (b.points !== a.points) return b.points - a.points;
@@ -27,7 +41,7 @@ const RoundRobinTableView = ({ matches, categoryId, onUpdate, onEdit, onForfeit,
                 setStandings(sorted);
             }
         } catch (err) { console.error(err); }
-        finally { setLoadingStandings(false); }
+        finally { if (isMounted.current) setLoadingStandings(false); }
     };
 
     // Use Standings (reliable list) or Matches to determine the primary sorting order
@@ -163,7 +177,7 @@ const RoundRobinTableView = ({ matches, categoryId, onUpdate, onEdit, onForfeit,
                                             
                                             // FLIP LOGIC: Compare names to decide if we need to swap
                                             // We want rowPlayer to be Team 1 (Top)
-                                            const t1Name = match.team1Name || (match.players?.team1?.[0]);
+                                            const t1Name = match.teams?.team1?.players?.[0]?.fullName || 'TBD';
                                             const isTeam1Row = t1Name === rowPlayer.fullName;
                                             
                                             if (!isTeam1Row) {
@@ -172,33 +186,10 @@ const RoundRobinTableView = ({ matches, categoryId, onUpdate, onEdit, onForfeit,
                                                 match.teams.team1 = match.teams.team2;
                                                 match.teams.team2 = tTeam;
 
-                                                // 2. Swap Display Names (Strings used by BracketCard)
-                                                const tNameStr = match.team1Name;
-                                                match.team1Name = match.team2Name;
-                                                match.team2Name = tNameStr;
-
-                                                // 3. Swap Players Array
-                                                if (match.players) {
-                                                    const tNames = match.players.team1;
-                                                    match.players.team1 = match.players.team2;
-                                                    match.players.team2 = tNames;
-                                                }
-
-                                                // 4. Swap Player IDs
-                                                if (match.playerIds) {
-                                                    const tIds = match.playerIds.team1;
-                                                    match.playerIds.team1 = match.playerIds.team2;
-                                                    match.playerIds.team2 = tIds;
-                                                }
 
                                                 // 5. Swap Scores/Result
-                                                if (match.matchResult) {
-                                                    const tS1 = match.matchResult.score1;
-                                                    match.matchResult.score1 = match.matchResult.score2;
-                                                    match.matchResult.score2 = tS1;
-                                                    if (match.matchResult.winner) {
-                                                        match.matchResult.winner = match.matchResult.winner === '1' ? '2' : '1';
-                                                    }
+                                                if (match.winner) {
+                                                    match.winner = match.winner === 'team1' ? 'team2' : 'team1';
                                                 }
                                             }
                                         }
@@ -210,9 +201,9 @@ const RoundRobinTableView = ({ matches, categoryId, onUpdate, onEdit, onForfeit,
                                                         <div className="scale-90 origin-top hover:scale-[0.92] transition-transform duration-300">
                                                             <BracketCard 
                                                                 match={match}
-                                                                onEdit={onEdit}
+                                                                onEdit={onEdit ? () => onEdit(originalMatch) : undefined}
                                                                 onUpdate={onUpdate}
-                                                                onForfeit={onForfeit}
+                                                                onForfeit={onForfeit ? () => onForfeit(originalMatch) : undefined}
                                                                 isHighlighted={highlightedId == match._id}
                                                                 setGlobalError={setGlobalError}
                                                             />

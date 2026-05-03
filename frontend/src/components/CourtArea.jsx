@@ -17,7 +17,8 @@ const PlayerToken = ({ player, teamId, isServer, customTop }) => {
         ${isServer ? 'ring-2 md:ring-4 ring-yellow-400 ring-offset-2 md:ring-offset-4 ring-offset-[#1b8a53]' : ''}
       `}
     >
-      <span className={`text-white font-bold px-3 py-1 md:px-5 md:py-2 rounded-full text-xs md:text-base whitespace-nowrap overflow-hidden text-ellipsis min-w-[80px] md:min-w-[120px] max-w-[130px] md:max-w-[200px] text-center font-sans tracking-wide ${teamId === 1 ? 'bg-blue-600 border-[1.5px] border-blue-400' : 'bg-red-600 border-[1.5px] border-red-400'}`}>
+      <span className={`text-white font-bold px-3 py-1 md:px-5 md:py-2 rounded-full text-xs md:text-base whitespace-nowrap overflow-hidden text-ellipsis min-w-[80px] md:min-w-[120px] max-w-[130px] md:max-w-[200px] text-center font-sans tracking-wide ${teamId === 'team1' ? 'bg-blue-600 border-[1.5px] border-blue-400' : 'bg-red-600 border-[1.5px] border-red-400'}`}>
+
         {displayName}
       </span>
       {isServer && (
@@ -35,15 +36,15 @@ const CourtArea = () => {
   const [showUndoConfirm, setShowUndoConfirm] = useState(false);
 
   // Determine which team is left vs right
-  const leftTeamId = teamOnLeft === 1 ? 1 : 2;
-  const rightTeamId = teamOnLeft === 1 ? 2 : 1;
+  const leftTeamId = teamOnLeft === 'team1' ? 'team1' : 'team2';
+  const rightTeamId = teamOnLeft === 'team1' ? 'team2' : 'team1';
 
-  const leftTeamPos = leftTeamId === 1 ? team1Pos : team2Pos;
-  const rightTeamPos = rightTeamId === 1 ? team1Pos : team2Pos;
+  const leftTeamPos = leftTeamId === 'team1' ? team1Pos : team2Pos;
+  const rightTeamPos = rightTeamId === 'team1' ? team1Pos : team2Pos;
 
   const activeServerId = activeServer?.id || activeServer;
   const isSingles = match?.matchType?.toLowerCase().includes('singles');
-  const servingScore = servingTeam === 1 ? scores.team1 : scores.team2;
+  const servingScore = servingTeam === 'team1' ? scores.team1 : scores.team2;
   const isEvenScore = servingScore % 2 === 0;
 
   return (
@@ -86,7 +87,8 @@ const CourtArea = () => {
         <div className="absolute bottom-12 md:bottom-20 left-2 md:left-6 pointer-events-auto z-30">
           <button
             onClick={() => addPoint(leftTeamId)}
-            className={`w-10 h-10 md:w-16 md:h-16 rounded-full flex items-center justify-center text-xl md:text-3xl text-white font-bold shadow-xl border-[3px] md:border-4 border-white/20 transition-all ${leftTeamId === 1 ? 'bg-blue-600 hover:bg-blue-500' : 'bg-red-600 hover:bg-red-500'}`}
+            className={`w-10 h-10 md:w-16 md:h-16 rounded-full flex items-center justify-center text-xl md:text-3xl text-white font-bold shadow-xl border-[3px] md:border-4 border-white/20 transition-all ${leftTeamId === 'team1' ? 'bg-blue-600 hover:bg-blue-500' : 'bg-red-600 hover:bg-red-500'}`}
+
           >
             +1
           </button>
@@ -137,7 +139,8 @@ const CourtArea = () => {
         <div className="absolute bottom-12 md:bottom-20 right-2 md:right-6 pointer-events-auto z-30">
           <button
             onClick={() => addPoint(rightTeamId)}
-            className={`w-10 h-10 md:w-16 md:h-16 rounded-full flex items-center justify-center text-xl md:text-3xl text-white font-bold shadow-xl border-[3px] md:border-4 border-white/20 transition-all ${rightTeamId === 1 ? 'bg-blue-600 hover:bg-blue-500' : 'bg-red-600 hover:bg-red-500'}`}
+            className={`w-10 h-10 md:w-16 md:h-16 rounded-full flex items-center justify-center text-xl md:text-3xl text-white font-bold shadow-xl border-[3px] md:border-4 border-white/20 transition-all ${rightTeamId === 'team1' ? 'bg-blue-600 hover:bg-blue-500' : 'bg-red-600 hover:bg-red-500'}`}
+
           >
             +1
           </button>
