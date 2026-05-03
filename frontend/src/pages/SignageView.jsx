@@ -18,8 +18,8 @@ const SignageView = () => {
       const letterAscii = match[1].toLowerCase().charCodeAt(0) - 97; // a -> 0, b -> 1
       const leftNo = (letterAscii * 2) + 1;
       const rightNo = (letterAscii * 2) + 2;
-      courtLeft = `court_${leftNo.toString().padStart(2, '0')}`;
-      courtRight = `court_${rightNo.toString().padStart(2, '0')}`;
+      courtLeft = leftNo.toString().padStart(2, '0');
+      courtRight = rightNo.toString().padStart(2, '0');
     }
   }
 

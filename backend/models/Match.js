@@ -17,11 +17,10 @@ const GameSchema = new mongoose.Schema({
 
 const MatchSchema = new mongoose.Schema({
   // Initial API Setup Data
-  courtNumber: { type: String, required: true },
-  matchId: { type: String, required: true, unique: true },
+  courtId: { type: String, required: true },
   matchType: { type: String, required: true }, // Singles or Doubles
-  category: { type: String, required: true },
-  round: { type: String, required: true },
+  categoryName: { type: String, required: true },
+  roundName: { type: String, required: true },
   gamesPerMatch: { type: Number, required: true },
   pointsPerGame: { type: Number, required: true },
   goldenPointAt: { type: Number, default: 0 },

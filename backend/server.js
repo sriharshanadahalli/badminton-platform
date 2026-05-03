@@ -64,13 +64,12 @@ app.get('/api/scheduler/courts', async (req, res) => {
       if (activeMatch) {
         activeMatch.team1Name = activeMatch.players.team1.join(' / ');
         activeMatch.team2Name = activeMatch.players.team2.join(' / ');
-        // roundName is now fetched from DB by mapMatchDataGlobal or set here
-        activeMatch.roundName = activeMatch.roundName || `Round ${activeMatch.round}`;
+        // roundName is now fetched from DB by mapMatchDataGlobal
       }
       if (upcomingMatch) {
         upcomingMatch.team1Name = upcomingMatch.players.team1.join(' / ');
         upcomingMatch.team2Name = upcomingMatch.players.team2.join(' / ');
-        upcomingMatch.roundName = upcomingMatch.roundName || `Round ${upcomingMatch.round}`;
+        upcomingMatch.roundName = upcomingMatch.roundName || `Round ${upcomingMatch.roundNumber}`;
       }
 
       return { ...c, status, activeMatch, upcomingMatch };
@@ -108,7 +107,7 @@ const mapMatchDataGlobal = async (matchInput, preFetchedData = null) => {
 
   // Resolve match document if only ID is provided
   let tMatch = matchInput;
-  if (typeof matchInput === 'string' || mongoose.Types.ObjectId.isValid(matchInput)) {
+  if (typeof matchInput === 'string' || (matchInput instanceof mongoose.Types.ObjectId)) {
     tMatch = await TournamentMatch.findById(matchInput).lean();
     if (!tMatch) return null;
   }
@@ -117,7 +116,7 @@ const mapMatchDataGlobal = async (matchInput, preFetchedData = null) => {
   if (preFetchedData) {
     const playerMap = preFetchedData.playerMap || {};
     const catMap = preFetchedData.catMap || {};
-    
+
     // Priority: Use pre-fetched live match if available
     const liveMatch = preFetchedData.liveMatchesMap?.[tMatch._id.toString()] || null;
 
@@ -146,20 +145,15 @@ const mapMatchDataGlobal = async (matchInput, preFetchedData = null) => {
 
     return {
       _id: tMatch._id.toString(),
-      dbId: tMatch._id.toString(),
-      matchId: `TM${tMatch._id}`,
       matchIndex: tMatch.matchIndex,
-      courtNumber: tMatch.courtId ? `court_${tMatch.courtId}` : 'court_TBD',
       courtId: tMatch.courtId,
       matchType: (team1Details.length > 1 || team2Details.length > 1) ? 'Doubles' : 'Singles',
-      category: resolveCategory(tMatch.categoryId, catMap),
       categoryName: resolveCategory(tMatch.categoryId, catMap),
       categoryId: tMatch.categoryId,
-      round: tMatch.roundName || (tMatch.round ? `Round ${tMatch.round}` : 'Round 1'),
-      roundName: tMatch.roundName || (tMatch.round ? `Round ${tMatch.round}` : 'Round 1'),
-      roundNumber: tMatch.round,
-      status: liveMatch?.status || tMatch.status,
-      winner: tMatch.winner,
+      roundName: tMatch.roundName || (tMatch.roundNumber ? `Round ${tMatch.roundNumber}` : 'Round 1'),
+      roundNumber: tMatch.roundNumber,
+      status: (['Completed', 'Forfeited'].includes(tMatch.status)) ? tMatch.status : (liveMatch?.status || tMatch.status),
+      winner: tMatch.matchResult?.winner,
       winnerMatchId: tMatch.winnerMatchId ? tMatch.winnerMatchId.toString() : null,
       sourceMatch1Id: tMatch.sourceMatch1Id ? tMatch.sourceMatch1Id.toString() : null,
       sourceMatch2Id: tMatch.sourceMatch2Id ? tMatch.sourceMatch2Id.toString() : null,
@@ -174,7 +168,6 @@ const mapMatchDataGlobal = async (matchInput, preFetchedData = null) => {
       currentScores,
       scores: liveMatch?.scores || currentScores,
       games: gamesSource,
-      parameters: tMatch.parameters || { gamesPerMatch: 3, pointsPerGame: 21, goldenPointAt: 20 },
       matchResult: tMatch.matchResult || { winner: null, finalScore: null, totalDurationMins: 0 },
       participation: tMatch.teams,
       gamesPerMatch: tMatch.parameters?.gamesPerMatch || 3,
@@ -214,19 +207,13 @@ const mapMatchDataGlobal = async (matchInput, preFetchedData = null) => {
   }
 
   return {
-    dbId: tMatch._id,
-    matchId: `TM${tMatch._id}`,
     matchIndex: tMatch.matchIndex,
-    courtNumber: tMatch.courtId ? `court_${tMatch.courtId}` : 'court_TBD',
     courtId: tMatch.courtId,
     matchType: (team1Details.length > 1 || team2Details.length > 1) ? 'Doubles' : 'Singles',
-    category: resolveCategory(tMatch.categoryId, catMap),
     categoryName: resolveCategory(tMatch.categoryId, catMap),
     categoryId: tMatch.categoryId,
-    round: tMatch.roundName || (tMatch.round ? `Round ${tMatch.round}` : 'Round 1'),
-    roundNumber: tMatch.round,
-    roundLabel: tMatch.roundName || (tMatch.round ? `Round ${tMatch.round}` : 'Round 1'),
-    roundName: tMatch.roundName || (tMatch.round ? `Round ${tMatch.round}` : 'Round 1'),
+    roundName: tMatch.roundName || (tMatch.roundNumber ? `Round ${tMatch.roundNumber}` : 'Round 1'),
+    roundNumber: tMatch.roundNumber,
     gamesPerMatch: tMatch.parameters?.gamesPerMatch || 3,
     pointsPerGame: tMatch.parameters?.pointsPerGame || 21,
     goldenPointAt: tMatch.parameters?.goldenPointAt || 20,
@@ -242,13 +229,15 @@ const mapMatchDataGlobal = async (matchInput, preFetchedData = null) => {
       team1: { players: team1Details },
       team2: { players: team2Details }
     },
-    status: liveMatch?.status || tMatch.status,
+    status: (['Completed', 'Forfeited'].includes(tMatch.status)) ? tMatch.status : (liveMatch?.status || tMatch.status),
     games: gamesSource,
     scores: liveMatch?.scores || currentScores,
     servingPlayer: liveMatch?.servingPlayer || tMatch.servingPlayer,
     tossWinner: liveMatch?.tossWinner || tMatch.tossWinner,
-    parameters: tMatch.parameters || { gamesPerMatch: 3, pointsPerGame: 21, goldenPointAt: 20 },
     matchResult: tMatch.matchResult || { winner: null, finalScore: null, totalDurationMins: 0 },
+    gamesPerMatch: tMatch.parameters?.gamesPerMatch || 3,
+    pointsPerGame: tMatch.parameters?.pointsPerGame || 21,
+    goldenPointAt: tMatch.parameters?.goldenPointAt || 20,
     winnerMatchId: tMatch.winnerMatchId,
     sourceMatch1Id: tMatch.sourceMatch1Id,
     sourceMatch2Id: tMatch.sourceMatch2Id,
@@ -259,28 +248,32 @@ const mapMatchDataGlobal = async (matchInput, preFetchedData = null) => {
   };
 };
 
-const broadcastCourtUpdate = async (courtId) => {
+const broadcastCourtUpdate = async (courtId, lastMatchOverride = null) => {
   if (!courtId) return;
   try {
     const court = await Court.findOne({ courtId })
       .populate('activeMatchId upcomingMatchId').lean();
-    if (!court) return;
+    if (!court) {
+      console.warn(`[Broadcast] Court ${courtId} not found for broadcast.`);
+      return;
+    }
+    console.log(`[Broadcast] Court ${courtId} state: Active=${court.activeMatchId?._id}, Upcoming=${court.upcomingMatchId?._id}`);
 
     const mappedMatch = await mapMatchDataGlobal(court.activeMatchId);
     const mappedNextMatch = await mapMatchDataGlobal(court.upcomingMatchId);
 
     let displayMatch = mappedMatch;
-    if (displayMatch && !['Assigned', 'Scheduled', 'Started', 'In Progress', 'Completed', 'Forfeited'].includes(displayMatch.status)) {
+    if (displayMatch && !['Assigned', 'Scheduled', 'In Progress', 'Completed', 'Forfeited'].includes(displayMatch.status)) {
       displayMatch = null;
     }
-    const numericId = parseInt(String(courtId).replace('court_', ''));
-    const lastMatch = await TournamentMatch.findOne({ 
-      courtId: String(courtId).replace('court_', ''), 
-      status: { $in: ['Completed', 'Forfeited'] } 
+    const lastMatch = lastMatchOverride || await TournamentMatch.findOne({
+      courtId,
+      status: { $in: ['Completed', 'Forfeited'] }
     }).sort({ updatedAt: -1 }).lean();
-    const mappedLastMatch = lastMatch ? await mapMatchDataGlobal(lastMatch._id) : null;
+    const mappedLastMatch = lastMatch ? await mapMatchDataGlobal(lastMatch) : null;
 
-    const roomName = `spectator_court_${numericId}`;
+    const roomName = `spectator_court_${courtId}`;
+    console.log(`[Broadcast] Sending spectator_update to ${roomName}. Match: ${displayMatch?.status}, Last: ${mappedLastMatch?.status}`);
     io.to(roomName).emit('spectator_update', {
       match: displayMatch,
       nextMatch: mappedNextMatch,
@@ -309,13 +302,17 @@ const broadcastCourtUpdate = async (courtId) => {
  *         description: Success
  */
 // REST Endpoint for live scoring app to fetch court data
-app.get('/api/court_status/:courtNumber', async (req, res) => {
+app.get('/api/court_status/:courtId', async (req, res) => {
   try {
-    const rawCourtId = req.params.courtNumber.replace('court_', '');
-    const court = await Court.findOne({ courtId: rawCourtId })
+    const { courtId } = req.params;
+    const court = await Court.findOne({ courtId: String(courtId).padStart(2, '0') })
       .populate('activeMatchId upcomingMatchId').lean();
-
-    if (!court) return res.json({ success: false, message: 'Court not found' });
+    
+    if (!court) {
+      console.error(`[Broadcast] Court ${courtId} not found for update!`);
+      return res.json({ success: false, message: 'Court not found' });
+    }
+    console.log(`[Broadcast] Court ${court.courtId} state: Active=${court.activeMatchId?._id || 'null'}, Status=${court.activeMatchId?.status || 'N/A'}`);
 
     let mappedMatch = await mapMatchDataGlobal(court.activeMatchId);
     const mappedNextMatch = await mapMatchDataGlobal(court.upcomingMatchId);
@@ -326,21 +323,21 @@ app.get('/api/court_status/:courtNumber', async (req, res) => {
     }
 
     if (!mappedMatch) {
-      const legacyMatch = await Match.findOne({ courtNumber: req.params.courtNumber }).sort({ createdAt: -1 });
+      const legacyMatch = await Match.findOne({ courtId }).sort({ createdAt: -1 });
       if (legacyMatch && ['Started', 'In Progress'].includes(legacyMatch.status)) {
         mappedMatch = legacyMatch;
       }
     }
 
-    const lastMatch = await TournamentMatch.findOne({ 
-      courtId: rawCourtId, 
-      status: { $in: ['Completed', 'Forfeited'] } 
+    const lastMatch = await TournamentMatch.findOne({
+      courtId,
+      status: { $in: ['Completed', 'Forfeited'] }
     }).sort({ updatedAt: -1 }).lean();
-    const mappedLastMatch = lastMatch ? await mapMatchDataGlobal(lastMatch._id) : null;
+    const mappedLastMatch = lastMatch ? await mapMatchDataGlobal(lastMatch) : null;
 
-    return res.json({ 
-      success: true, 
-      match: mappedMatch, 
+    return res.json({
+      success: true,
+      match: mappedMatch,
       nextMatch: mappedNextMatch,
       lastMatch: mappedLastMatch
     });
@@ -402,26 +399,26 @@ async function calculateAvailability() {
           availableEntries.push({
             playerId: id,
             playerName: playerMap[id] || id,
+            _id: m._id,
             categoryId: m.categoryId,
             categoryName,
-            matchId: m._id,
             matchType: t1Ids.length > 1 ? 'Doubles' : 'Singles',
             partnerName: t1Ids.length > 1 ? (playerMap[t1Ids.find((_, i) => i !== idx)] || t1Ids.find((_, i) => i !== idx)) : null,
             matchesPlayed: playerMatchCount[id] || 0,
-            roundName: m.roundName || `Round ${m.round}`
+            roundName: m.roundName || `Round ${m.roundNumber}`
           });
         });
         t2Ids.forEach((id, idx) => {
           availableEntries.push({
             playerId: id,
             playerName: playerMap[id] || id,
+            _id: m._id,
             categoryId: m.categoryId,
             categoryName,
-            matchId: m._id,
             matchType: t2Ids.length > 1 ? 'Doubles' : 'Singles',
             partnerName: t2Ids.length > 1 ? (playerMap[t2Ids.find((_, i) => i !== idx)] || t2Ids.find((_, i) => i !== idx)) : null,
             matchesPlayed: playerMatchCount[id] || 0,
-            roundName: m.roundName || `Round ${m.round}`
+            roundName: m.roundName || `Round ${m.roundNumber}`
           });
         });
       }
@@ -540,11 +537,11 @@ app.get('/api/scheduler/summary', async (req, res) => {
   try {
     const categories = await Category.find({}).sort({ categoryName: 1 }).lean();
     const allAvailable = await calculateAvailability();
-    
+
     const summary = await Promise.all(categories.map(async (cat) => {
       const allMatches = await TournamentMatch.find({ categoryId: cat.categoryId }).lean();
       const realMatches = allMatches.filter(m => m.status !== 'BYE');
-      
+
       // Count unique available players for this category
       const catAvailable = allAvailable.filter(a => a.categoryId === cat.categoryId);
       const uniquePlayers = new Set(catAvailable.map(a => a.playerId));
@@ -608,8 +605,8 @@ app.post('/api/test/simulate-bracket', async (req, res) => {
 
         const match = {
           _id: matchId,
-          matchId: matchId,
           round,
+          roundNumber: round,
           matchIndex: (i / 2) + 1,
           status,
           team1Name: team1.name,
@@ -640,8 +637,8 @@ app.post('/api/test/simulate-bracket', async (req, res) => {
     // 5. Assign Round Names
     const totalRounds = round - 1;
     allMatches.forEach(m => {
-      let roundName = `Round ${m.round}`;
-      const roundsFromFinal = totalRounds - m.round;
+      let roundName = `Round ${m.roundNumber}`;
+      const roundsFromFinal = totalRounds - m.roundNumber;
       if (roundsFromFinal === 0) roundName = "Final";
       else if (roundsFromFinal === 1) roundName = "Semi Final";
       else if (roundsFromFinal === 2) roundName = "Quarter Final";
@@ -715,7 +712,7 @@ async function generateBracketsInternal(categoryId) {
 
       const match = new TournamentMatch({
         categoryId,
-        round,
+        roundNumber: round,
         matchIndex: globalMatchIndex++,
         status: 'Created',
         teams: {
@@ -772,8 +769,8 @@ async function generateBracketsInternal(categoryId) {
   // 5. Finalize Round Names
   const totalRounds = round - 1;
   allMatches.forEach(m => {
-    let roundName = `Round ${m.round}`;
-    const roundsFromFinal = totalRounds - m.round;
+    let roundName = `Round ${m.roundNumber}`;
+    const roundsFromFinal = totalRounds - m.roundNumber;
     if (roundsFromFinal === 0) roundName = "Final";
     else if (roundsFromFinal === 1) roundName = "Semi Final";
     else if (roundsFromFinal === 2) roundName = "Quarter Final";
@@ -823,18 +820,18 @@ app.post('/api/scheduler/generate-all-brackets', async (req, res) => {
     for (const cat of categories) {
       try {
         const matchCount = await generateBracketsInternal(cat.categoryId);
-        results.push({ 
-          categoryId: cat.categoryId, 
-          categoryName: cat.categoryName, 
-          status: 'success', 
-          message: `${matchCount} matches generated` 
+        results.push({
+          categoryId: cat.categoryId,
+          categoryName: cat.categoryName,
+          status: 'success',
+          message: `${matchCount} matches generated`
         });
       } catch (err) {
-        results.push({ 
-          categoryId: cat.categoryId, 
-          categoryName: cat.categoryName, 
-          status: 'error', 
-          message: err.message 
+        results.push({
+          categoryId: cat.categoryId,
+          categoryName: cat.categoryName,
+          status: 'error',
+          message: err.message
         });
       }
     }
@@ -886,7 +883,7 @@ app.post('/api/scheduler/generate-round-robin', async (req, res) => {
   try {
     const formattedName = `RR_${categoryName.toUpperCase()}`;
     const categoryId = formattedName.replace(/\s+/g, '_');
-    
+
     // 1. Create or Update Category
     await Category.findOneAndUpdate(
       { categoryId },
@@ -905,7 +902,7 @@ app.post('/api/scheduler/generate-round-robin', async (req, res) => {
       if (!partic) {
         partic = await Participation.create({ categoryId, player1Id: pId, player2Id: null });
       }
-      participations.push({ pId, dbId: partic._id });
+      participations.push({ pId, teamId: partic._id });
     }
 
     // 4. Generate All Combinations (Each pair plays once)
@@ -913,19 +910,19 @@ app.post('/api/scheduler/generate-round-robin', async (req, res) => {
     let matchIndex = 0;
     // Clear old matches for this category to avoid duplicates on regen
     await TournamentMatch.deleteMany({ categoryId });
-    
+
     for (let i = 0; i < participations.length; i++) {
       for (let j = i + 1; j < participations.length; j++) {
         const paramOverride = APP_CONFIG.DEFAULT_MATCH_PARAMS || { gamesPerMatch: 3, pointsPerGame: 21, goldenPointAt: 20 };
         matches.push(new TournamentMatch({
           categoryId,
-          round: 1, 
+          roundNumber: 1,
           roundName: 'League',
           matchIndex: matchIndex++,
           status: 'Created',
           teams: {
-            team1: participations[i].dbId,
-            team2: participations[j].dbId
+            team1: participations[i].teamId,
+            team2: participations[j].teamId
           },
           parameters: paramOverride
         }));
@@ -957,7 +954,7 @@ app.get('/api/scheduler/bracket-view/:categoryId', async (req, res) => {
   try {
     console.time(`[BracketView] ${categoryId}`);
     // 1. Fetch matches
-    const matches = await TournamentMatch.find({ categoryId }).sort({ round: 1, matchIndex: 1 }).lean();
+    const matches = await TournamentMatch.find({ categoryId }).sort({ roundNumber: 1, matchIndex: 1 }).lean();
     if (matches.length === 0) {
       console.timeEnd(`[BracketView] ${categoryId}`);
       return res.json({ success: true, data: [] });
@@ -1043,7 +1040,11 @@ app.get('/api/scheduler/bracket-view/:categoryId', async (req, res) => {
  *       required: true
  *       content:
  *         application/json:
- *           schema: { type: object }
+ *           schema:
+ *             type: object
+ *             properties:
+ *               roundNumber: { type: number }
+ *               roundName: { type: string }
  *     responses:
  *       200:
  *         description: Success
@@ -1281,12 +1282,11 @@ const syncTournamentMatchToLiveRecord = async (tmId) => {
   const team2Ids = await fetchParticipationDetails(tm.participation?.team2 || tm.teams?.team2);
 
   const matchPayload = {
-    courtNumber: `court_${String(tm.courtId).padStart(2, '0')}`,
-    matchId: `TM${tm._id}`,
+    courtId: tm.courtId,
     tournamentMatchId: tm._id,
     matchType: (team1Ids.length > 1 || team2Ids.length > 1) ? 'Doubles' : 'Singles',
-    category: tm.categoryId, // STORE ID
-    round: tm.roundName || `Round ${tm.round}`,
+    categoryName: catMap[tm.categoryId] || tm.categoryId,
+    roundName: tm.roundName || `Round ${tm.roundNumber}`,
     gamesPerMatch: tm.parameters?.gamesPerMatch || 3,
     pointsPerGame: tm.parameters?.pointsPerGame || 21,
     goldenPointAt: tm.parameters?.goldenPointAt || 0,
@@ -1383,16 +1383,13 @@ const enrichMatchForSpectators = async (match) => {
   const categories = await Category.find({}).lean();
   const catMap = categories.reduce((acc, c) => { acc[c.categoryId] = c.categoryName; return acc; }, {});
 
-  matchObj.categoryName = catMap[matchObj.category] || matchObj.category;
-  // COMPATIBILITY: Force 'category' to hold the name for older signage/mobile UI views
-  matchObj.category = matchObj.categoryName;
+  matchObj.categoryName = catMap[matchObj.categoryName] || matchObj.categoryName;
 
   // Ensure round/roundName is available
-  if (!matchObj.round && matchObj.tournamentMatchId) {
+  if (!matchObj.roundName && matchObj.tournamentMatchId) {
     const tm = await TournamentMatch.findById(matchObj.tournamentMatchId).lean();
-    if (tm) matchObj.round = tm.roundName || `Round ${tm.round}`;
+    if (tm) matchObj.roundName = tm.roundName || `Round ${tm.roundNumber}`;
   }
-  matchObj.roundName = matchObj.round;
 
   // Resolve IDs back to names for human-readable labels while preserving ID keys
   if (matchObj.servingPlayer) {
@@ -1450,22 +1447,287 @@ const enrichMatchForSpectators = async (match) => {
 
 const activeJoins = new Set();
 
+// NEW: Reusable logic to handle Match completion and tournament progression
+const completeTournamentMatch = async (tmId, resultData, isForfeit = false, finalGames = null) => {
+  try {
+    const tm = await TournamentMatch.findByIdAndUpdate(tmId, {
+      status: isForfeit ? 'Forfeited' : 'Completed',
+      matchResult: resultData,
+      ...(finalGames && { games: finalGames })
+    }, { new: true });
+
+    if (!tm) {
+      console.error(`[completeTournamentMatch] TM ${tmId} not found!`);
+      return null;
+    }
+    console.log(`[completeTournamentMatch] TM ${tmId} status set to ${tm.status}. courtId: ${tm.courtId}`);
+
+    // Broadcast cleanup to the court
+    if (tm.courtId) {
+      const court = await Court.findOne({ courtId: tm.courtId });
+      if (court) {
+        // If the finished match was the active one, shift the queue
+        if (String(court.activeMatchId) === String(tm._id)) {
+          court.activeMatchId = court.upcomingMatchId;
+          court.upcomingMatchId = null;
+          court.status = 'Available';
+        } else if (String(court.upcomingMatchId) === String(tm._id)) {
+          court.upcomingMatchId = null;
+          court.status = 'Available';
+        }
+        await court.save();
+      }
+
+      // Delete the live match record to ensure no stale data in broadcasts
+      await Match.deleteOne({ tournamentMatchId: tm._id });
+
+      // Real-time notification to signage and mobile
+      console.log(`[completeTournamentMatch] Broadcasting update for court ${tm.courtId}. TM status: ${tm.status}`);
+      await broadcastCourtUpdate(tm.courtId, tm);
+      
+      // Critical: Signal the Umpire/Scoring app to exit or refresh
+      io.to(`court_status_${tm.courtId}`).emit('court_reloaded');
+    }
+
+    // [ROUND ROBIN STANDINGS UPDATE]
+    if (tm.categoryId && tm.categoryId.startsWith('RR_')) {
+      console.log(`[RoundRobin] Updating standings for categoryId: ${tm.categoryId}`);
+      try {
+        const t1Id = parseInt(resultData.winner) === 1 ? tm.teams.team1 : tm.teams.team2;
+        const t2Id = parseInt(resultData.winner) === 1 ? tm.teams.team2 : tm.teams.team1;
+
+        const getPlayerId = async (particId) => {
+          const p = await Participation.findById(particId).lean();
+          return p?.player1Id;
+        };
+
+        const p1Id = await getPlayerId(tm.teams.team1);
+        const p2Id = await getPlayerId(tm.teams.team2);
+
+        // Calculate point difference from games
+        let p1Points = 0;
+        let p2Points = 0;
+        let p1Games = 0;
+        let p2Games = 0;
+
+        if (tm.games) {
+          tm.games.forEach(g => {
+            const s1 = g.accumulatedScores?.team1 || 0;
+            const s2 = g.accumulatedScores?.team2 || 0;
+            p1Points += s1;
+            p2Points += s2;
+            if (s1 > s2) p1Games++;
+            else if (s2 > s1) p2Games++;
+          });
+        }
+
+        const winnerTeam = parseInt(resultData.winner);
+
+        // Update Winner
+        const winnerPId = winnerTeam === 1 ? p1Id : p2Id;
+        const winnerPointsDiff = winnerTeam === 1 ? (p1Points - p2Points) : (p2Points - p1Points);
+        const winnerGamesWon = winnerTeam === 1 ? p1Games : p2Games;
+        const winnerGamesLost = winnerTeam === 1 ? p2Games : p1Games;
+
+        await RoundRobinStanding.findOneAndUpdate(
+          { categoryId: tm.categoryId, playerId: winnerPId },
+          {
+            $inc: {
+              points: 2,
+              wins: 1,
+              matchesPlayed: 1,
+              pointDifference: winnerPointsDiff,
+              gamesWon: winnerGamesWon,
+              gamesLost: winnerGamesLost
+            }
+          }
+        );
+
+        // Update Loser
+        const loserPId = winnerTeam === 1 ? p2Id : p1Id;
+        const loserPointsDiff = winnerTeam === 1 ? (p2Points - p1Points) : (p1Points - p2Points);
+        const loserGamesWon = winnerTeam === 1 ? p2Games : p1Games;
+        const loserGamesLost = winnerTeam === 1 ? p1Games : p2Games;
+
+        await RoundRobinStanding.findOneAndUpdate(
+          { categoryId: tm.categoryId, playerId: loserPId },
+          {
+            $inc: {
+              points: 0,
+              losses: 1,
+              matchesPlayed: 1,
+              pointDifference: loserPointsDiff,
+              gamesWon: loserGamesWon,
+              gamesLost: loserGamesLost
+            }
+          }
+        );
+
+        console.log(`[RoundRobin] Standings updated successfully.`);
+        await updateCategoryResult(tm.categoryId);
+      } catch (rrErr) {
+        console.error("Round Robin Standings Update Error:", rrErr);
+      }
+    }
+
+    // BRACKET PROGRESSION: Advance winner to the next round match slot!
+    if (tm.winnerMatchId) {
+      const nextMatch = await TournamentMatch.findById(tm.winnerMatchId);
+      if (nextMatch) {
+        let winningParticipationId = null;
+        const winnerId = parseInt(resultData.winner);
+
+        if (winnerId === 1) winningParticipationId = tm.teams.team1;
+        else if (winnerId === 2) winningParticipationId = tm.teams.team2;
+
+        if (winningParticipationId) {
+          console.log(`[Bracket] Advancing runner: ${winningParticipationId} to Match: ${nextMatch._id}`);
+          if (nextMatch.sourceMatch1Id && nextMatch.sourceMatch1Id.equals(tm._id)) {
+            nextMatch.set('teams.team1', winningParticipationId);
+          } else if (nextMatch.sourceMatch2Id && nextMatch.sourceMatch2Id.equals(tm._id)) {
+            nextMatch.set('teams.team2', winningParticipationId);
+          }
+          if (nextMatch.teams.team1 && nextMatch.teams.team2) {
+            nextMatch.status = 'Created';
+          }
+          await nextMatch.save();
+        }
+      }
+    }
+
+    // [KNOCKOUT RESULT UPDATE]
+    if (tm.roundName === 'Final' || tm.roundName === 'Semi Final') {
+      await updateCategoryResult(tm.categoryId);
+    }
+
+    return tm;
+  } catch (err) {
+    console.error("Completion Helper Error:", err);
+    return null;
+  }
+};
+
+// HELPER: Centralized Result Calculator for the Podium
+const updateCategoryResult = async (categoryId) => {
+  try {
+    const category = await Category.findOne({ categoryId }).lean();
+    if (!category) return;
+
+    let resultData = {
+      categoryId,
+      categoryName: category.categoryName,
+      format: categoryId.startsWith('RR_') ? 'RoundRobin' : 'Knockout',
+      winner: '-',
+      runnerUp: '-',
+      semi1: '-',
+      semi2: '-'
+    };
+
+    if (resultData.format === 'RoundRobin') {
+      // Only push to Results table if every match in the league is finished
+      const incompleteCount = await TournamentMatch.countDocuments({
+        categoryId,
+        status: { $nin: ['Completed', 'Forfeited', 'BYE'] }
+      });
+
+      if (incompleteCount > 0) {
+        console.log(`[ResultUpdate] RR Category ${categoryId}: ${incompleteCount} matches remaining. Postponing podium push.`);
+        return;
+      }
+
+      // 1. Fetch Top 4 from Standings
+      const standings = await RoundRobinStanding.find({ categoryId }).sort({ points: -1, pointDifference: -1 }).limit(4).lean();
+      if (standings[0]) resultData.winner = standings[0].playerName;
+      if (standings[1]) resultData.runnerUp = standings[1].playerName;
+      if (standings[2]) resultData.semi1 = standings[2].playerName;
+      if (standings[3]) resultData.semi2 = standings[3].playerName;
+    } else {
+      // 2. Fetch from Knockout Matches
+      const matches = await TournamentMatch.find({ categoryId }).lean();
+      const participations = await Participation.find({ categoryId }).lean();
+      const players = await Player.find({}).lean();
+      const playerMap = players.reduce((acc, p) => { acc[p.profileId] = p.fullName; return acc; }, {});
+
+      const getTeamName = (pId) => {
+        const part = participations.find(p => p._id.toString() === pId?.toString());
+        if (!part) return 'TBD';
+        const p1 = playerMap[part.player1Id] || part.player1Id;
+        const p2 = part.player2Id ? (playerMap[part.player2Id] || part.player2Id) : null;
+        return p2 ? `${p1} / ${p2}` : p1;
+      };
+
+      const finalMatch = matches.find(m => m.roundName === 'Final');
+      if (finalMatch && (finalMatch.status === 'Completed' || finalMatch.status === 'Forfeited')) {
+        const winId = finalMatch.matchResult?.winner;
+        resultData.winner = winId === '1' ? getTeamName(finalMatch.teams.team1) : getTeamName(finalMatch.teams.team2);
+        resultData.runnerUp = winId === '1' ? getTeamName(finalMatch.teams.team2) : getTeamName(finalMatch.teams.team1);
+      }
+
+      const semiMatches = matches.filter(m => m.roundName === 'Semi Final');
+      const semiLosers = semiMatches.map(m => {
+        if (m.status === 'Completed' || m.status === 'Forfeited') {
+          const winId = m.matchResult?.winner;
+          return winId === '1' ? getTeamName(m.teams.team2) : getTeamName(m.teams.team1);
+        }
+        return '-';
+      }).filter(n => n !== '-' && n !== 'TBD');
+
+      resultData.semi1 = semiLosers[0] || '-';
+      resultData.semi2 = semiLosers[1] || '-';
+    }
+
+    await TournamentResult.findOneAndUpdate(
+      { categoryId },
+      { $set: resultData },
+      { upsert: true }
+    );
+    console.log(`[ResultUpdate] Category ${categoryId} updated in TournamentResult.`);
+  } catch (err) {
+    console.error("Result Calculator Error:", err);
+  }
+};
+
+// API: Forfeit Match manually from Scheduler
+app.post('/api/scheduler/match/:matchId/forfeit', async (req, res) => {
+  const { matchId } = req.params;
+  const { forfeitingTeamId } = req.body; // 1 or 2
+
+  try {
+    const winnerId = (parseInt(forfeitingTeamId) === 1) ? 2 : 1;
+    const resultData = {
+      winner: String(winnerId),
+      finalScore: "Forfeit",
+      totalDurationMins: 0
+    };
+
+    const tm = await completeTournamentMatch(matchId, resultData, true);
+    if (!tm) return res.status(404).json({ success: false, message: 'Match not found' });
+
+    // Also clear the live 'Match' record if it exists
+    await Match.deleteOne({ tournamentMatchId: matchId });
+
+    io.emit('scheduler_update');
+    res.json({ success: true, message: 'Match forfeited successfully.' });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 io.on('connection', (socket) => {
   console.log(`Scorer Device Connected: ${socket.id}`);
 
   // Event 0: Passive Client Sync Configuration
-  socket.on('spectate_court', ({ courtNumber }) => {
-    const numericId = parseInt(String(courtNumber).replace('court_', ''));
-    const roomName = `spectator_court_${numericId}`;
+  socket.on('spectate_court', ({ courtId }) => {
+    console.log(`[Socket] Raw courtId received for spectate: "${courtId}" (Type: ${typeof courtId})`);
+    const roomName = `spectator_court_${courtId}`;
     socket.join(roomName);
-    console.log(`[${socket.id}] Joined spectator room: ${roomName}`);
+    console.log(`[${socket.id}] Joined spectator room: "${roomName}"`);
   });
-  
+
   // Dedicated room for Umpire/Scoring apps to receive admin signals (reloads, assignments)
   socket.on('subscribe_to_court', ({ courtId }) => {
     if (!courtId) return;
-    const numericId = parseInt(String(courtId).replace('court_', ''));
-    const roomName = `court_status_${numericId}`;
+    const roomName = `court_status_${courtId}`;
     socket.join(roomName);
     console.log(`[${socket.id}] Subscribed to court status: ${roomName}`);
   });
@@ -1474,21 +1736,21 @@ io.on('connection', (socket) => {
   socket.on('join_court', async ({ courtData }) => {
     // Basic Mutex: Prevent React Strict Mode double-firing creating identical twin match records
     // wait until the court clears initialization
-    while (activeJoins.has(courtData.courtNumber)) {
+    while (activeJoins.has(courtData.courtId)) {
       await new Promise(r => setTimeout(r, 50));
     }
-    activeJoins.add(courtData.courtNumber);
+    activeJoins.add(courtData.courtId);
 
     try {
-      console.log(`[${socket.id}] Attempting join_court for ${courtData.courtNumber}...`);
+      console.log(`[${socket.id}] Attempting join_court for ${courtData.courtId}...`);
       // Find the pre-created match record (Linked via tournamentMatchId)
       let match = await Match.findOne({
-        tournamentMatchId: courtData.dbId
+        tournamentMatchId: courtData._id
       });
       console.log(`[${socket.id}] Find match by tournamentMatchId result:`, !!match);
 
       if (!match) {
-        console.log(`[${socket.id}] Match not found for TM${courtData.dbId}. Scheduler must assign court first.`);
+        console.log(`[${socket.id}] Match not found for TM${courtData._id}. Scheduler must assign court first.`);
         socket.emit('court_locked_error', { message: "Match record not found. Please ensure court is assigned in Scheduler." });
         return;
       }
@@ -1513,27 +1775,27 @@ io.on('connection', (socket) => {
       await match.save();
 
       console.log(`[${socket.id}] Emitting court_joined_success...`);
-      socket.join(match.matchId);
-      
+      socket.join(String(match.tournamentMatchId));
+
       // Join a court-specific room to receive reloads/broadcasts even if matchId changes
-      const numericId = parseInt(match.courtNumber.replace('court_', ''));
+      const numericId = match.courtId;
       socket.join(`court_status_${numericId}`);
-      
+
       socket.emit('court_joined_success', { match });
 
     } catch (err) {
       console.error("Court Join Error:", err);
       socket.emit('sync_error', { message: "Internal DB Error on joining court." });
     } finally {
-      activeJoins.delete(courtData.courtNumber);
+      activeJoins.delete(courtData.courtId);
     }
   });
 
   // Event 2: Toss Finished, Lock match in as Started
   socket.on('start_match', async ({ matchId, tossWinnerId, tossWinner, servingPlayerId, servingPlayer, receivingPlayerId, receivingPlayer }) => {
-    console.log(`[${socket.id}] start_match triggered for matchId=${matchId}`);
+    console.log(`[${socket.id}] start_match triggered for _id=${matchId}`);
     try {
-      const match = await Match.findOne({ matchId, lockedByDevice: socket.id });
+      const match = await Match.findOne({ tournamentMatchId: matchId, lockedByDevice: socket.id });
       console.log(`[${socket.id}] start_match find result:`, !!match);
       if (!match) {
         console.log(`[${socket.id}] COULD NOT FIND MATCH to update! matchId=${matchId}, lockedByDevice=${socket.id}. Verify the lock belongs to this socket.`);
@@ -1557,7 +1819,7 @@ io.on('connection', (socket) => {
         });
       }
 
-      const rawCourtId = String(match.courtNumber).replace('court_', '');
+      const { courtId } = match;
 
       // EXPLICIT SYNC: Use the stored tournamentMatchId to update precisely the right record
       let tm = null;
@@ -1597,14 +1859,14 @@ io.on('connection', (socket) => {
       } else {
         // Fallback legacy logic for orphaned live matches
         tm = await TournamentMatch.findOneAndUpdate(
-          { courtId: rawCourtId, status: { $in: ['Scheduled', 'Assigned', 'Started', 'In Progress'] } },
+          { courtId: match.courtId, status: { $in: ['Scheduled', 'Assigned', 'Started', 'In Progress'] } },
           {
             status: 'In Progress',
             games: match.games,
             servingPlayer: servingPlayerId || servingPlayer,
             tossWinner: tossWinnerId || tossWinner
           },
-          { returnDocument: 'after', sort: { round: -1, matchIndex: 1 } }
+          { returnDocument: 'after', sort: { roundNumber: -1, matchIndex: 1 } }
         );
       }
 
@@ -1616,8 +1878,8 @@ io.on('connection', (socket) => {
       console.log(`[${socket.id}] start_match save success`);
       socket.emit('sync_success', { action: 'start_match', match });
       const enriched = await enrichMatchForSpectators(match);
-      const numericId = parseInt(String(match.courtNumber).replace('court_', ''));
-      io.to(match.matchId).emit('spectator_update', { match: enriched }); // Broadcast to future spectators
+      const numericId = match.courtId;
+      io.to(String(match.tournamentMatchId)).emit('spectator_update', { match: enriched }); // Broadcast to future spectators
       io.to(`spectator_court_${numericId}`).emit('spectator_update', { match: enriched }); // Broadcast directly to Signage
       io.emit('scheduler_update'); // Broadcast to Scheduler View
     } catch (err) {
@@ -1656,7 +1918,7 @@ io.on('connection', (socket) => {
       }
 
       const match = await Match.findOneAndUpdate(
-        { matchId, lockedByDevice: socket.id },
+        { tournamentMatchId: matchId, lockedByDevice: socket.id },
         { $set: updateSet },
         { returnDocument: 'after', runValidators: true }
       );
@@ -1680,8 +1942,8 @@ io.on('connection', (socket) => {
       }
 
       const enrichedMatch = await enrichMatchForSpectators(match);
-      const numericId = parseInt(String(match.courtNumber).replace('court_', ''));
-      io.to(match.matchId).emit('spectator_update', { match: enrichedMatch });
+      const numericId = match.courtId;
+      io.to(String(match.tournamentMatchId)).emit('spectator_update', { match: enrichedMatch });
       io.to(`spectator_court_${numericId}`).emit('spectator_update', { match: enrichedMatch });
     } catch (err) {
       console.error(`[${socket.id}] sync_live_state error:`, err);
@@ -1692,7 +1954,7 @@ io.on('connection', (socket) => {
   socket.on('start_next_game', async ({ matchId, newGameNumber }) => {
     try {
       const match = await Match.findOneAndUpdate(
-        { matchId, lockedByDevice: socket.id },
+        { tournamentMatchId: matchId, lockedByDevice: socket.id },
         {
           $push: { games: { gameNumber: newGameNumber, status: 'In Progress', accumulatedScores: { team1: 0, team2: 0 }, pointArrays: {} } },
           $set: { currentGameIsOver: false, goldenPointActive: false }
@@ -1709,8 +1971,8 @@ io.on('connection', (socket) => {
 
       if (match) {
         const enrichedMatch = await enrichMatchForSpectators(match);
-        const numericId = parseInt(String(match.courtNumber).replace('court_', ''));
-        io.to(match.matchId).emit('spectator_update', { match: enrichedMatch });
+        const numericId = match.courtId;
+        io.to(String(match.tournamentMatchId)).emit('spectator_update', { match: enrichedMatch });
         io.to(`spectator_court_${numericId}`).emit('spectator_update', { match: enrichedMatch });
       }
     } catch (err) {
@@ -1718,275 +1980,12 @@ io.on('connection', (socket) => {
     }
   });
 
-  // NEW: Reusable logic to handle Match completion and tournament progression
-  const completeTournamentMatch = async (tmId, resultData, isForfeit = false, finalGames = null) => {
-    try {
-      const tm = await TournamentMatch.findByIdAndUpdate(tmId, {
-        status: isForfeit ? 'Forfeited' : 'Completed',
-        matchResult: resultData,
-        ...(finalGames && { games: finalGames })
-      }, { new: true });
-
-      if (!tm) return null;
-
-      // Broadcast final result to spectators before shifting the court queue
-      if (tm.courtId) {
-        const finalMatchData = await mapMatchDataGlobal(tm._id);
-        const numericId = parseInt(String(tm.courtId).replace('court_', ''));
-        io.to(`spectator_court_${numericId}`).emit('spectator_update', { match: finalMatchData });
-      }
-
-      // Broadcast cleanup to the court
-      if (tm.courtId) {
-        const court = await Court.findOne({ courtId: tm.courtId });
-        if (court) {
-          // If the finished match was the active one, shift the queue
-          if (String(court.activeMatchId) === String(tm._id)) {
-            court.activeMatchId = court.upcomingMatchId;
-            court.upcomingMatchId = null;
-            court.status = 'Available';
-            await court.save();
-          } else if (String(court.upcomingMatchId) === String(tm._id)) {
-            court.upcomingMatchId = null;
-            court.status = 'Available';
-            await court.save();
-          }
-        }
-        await broadcastCourtUpdate(tm.courtId);
-        const numericId = parseInt(String(tm.courtId).replace('court_', ''));
-        io.to(`court_status_${numericId}`).emit('court_reloaded');
-      }
-
-      // [ROUND ROBIN STANDINGS UPDATE]
-      if (tm.categoryId && tm.categoryId.startsWith('RR_')) {
-        console.log(`[RoundRobin] Updating standings for category: ${tm.categoryId}`);
-        try {
-          const t1Id = parseInt(resultData.winner) === 1 ? tm.teams.team1 : tm.teams.team2;
-          const t2Id = parseInt(resultData.winner) === 1 ? tm.teams.team2 : tm.teams.team1;
-
-          const getPlayerId = async (particId) => {
-            const p = await Participation.findById(particId).lean();
-            return p?.player1Id;
-          };
-
-          const p1Id = await getPlayerId(tm.teams.team1);
-          const p2Id = await getPlayerId(tm.teams.team2);
-
-          // Calculate point difference from games
-          let p1Points = 0;
-          let p2Points = 0;
-          let p1Games = 0;
-          let p2Games = 0;
-
-          if (tm.games) {
-            tm.games.forEach(g => {
-              const s1 = g.accumulatedScores?.team1 || 0;
-              const s2 = g.accumulatedScores?.team2 || 0;
-              p1Points += s1;
-              p2Points += s2;
-              if (s1 > s2) p1Games++;
-              else if (s2 > s1) p2Games++;
-            });
-          }
-
-          const winnerTeam = parseInt(resultData.winner);
-          
-          // Update Winner
-          const winnerPId = winnerTeam === 1 ? p1Id : p2Id;
-          const winnerPointsDiff = winnerTeam === 1 ? (p1Points - p2Points) : (p2Points - p1Points);
-          const winnerGamesWon = winnerTeam === 1 ? p1Games : p2Games;
-          const winnerGamesLost = winnerTeam === 1 ? p2Games : p1Games;
-
-          await RoundRobinStanding.findOneAndUpdate(
-            { categoryId: tm.categoryId, playerId: winnerPId },
-            { 
-              $inc: { 
-                points: 2, 
-                wins: 1, 
-                matchesPlayed: 1, 
-                pointDifference: winnerPointsDiff,
-                gamesWon: winnerGamesWon,
-                gamesLost: winnerGamesLost
-              } 
-            }
-          );
-
-          // Update Loser
-          const loserPId = winnerTeam === 1 ? p2Id : p1Id;
-          const loserPointsDiff = winnerTeam === 1 ? (p2Points - p1Points) : (p1Points - p2Points);
-          const loserGamesWon = winnerTeam === 1 ? p2Games : p1Games;
-          const loserGamesLost = winnerTeam === 1 ? p1Games : p2Games;
-
-          await RoundRobinStanding.findOneAndUpdate(
-            { categoryId: tm.categoryId, playerId: loserPId },
-            { 
-              $inc: { 
-                points: 0, 
-                losses: 1, 
-                matchesPlayed: 1, 
-                pointDifference: loserPointsDiff,
-                gamesWon: loserGamesWon,
-                gamesLost: loserGamesLost
-              } 
-            }
-          );
-          
-          console.log(`[RoundRobin] Standings updated successfully.`);
-          await updateCategoryResult(tm.categoryId);
-        } catch (rrErr) {
-          console.error("Round Robin Standings Update Error:", rrErr);
-        }
-      }
-
-      // BRACKET PROGRESSION: Advance winner to the next round match slot!
-      if (tm.winnerMatchId) {
-        const nextMatch = await TournamentMatch.findById(tm.winnerMatchId);
-        if (nextMatch) {
-          let winningParticipationId = null;
-          const winnerId = parseInt(resultData.winner);
-
-          if (winnerId === 1) winningParticipationId = tm.teams.team1;
-          else if (winnerId === 2) winningParticipationId = tm.teams.team2;
-
-          if (winningParticipationId) {
-            console.log(`[Bracket] Advancing runner: ${winningParticipationId} to Match: ${nextMatch._id}`);
-            if (nextMatch.sourceMatch1Id && nextMatch.sourceMatch1Id.equals(tm._id)) {
-              nextMatch.set('teams.team1', winningParticipationId);
-            } else if (nextMatch.sourceMatch2Id && nextMatch.sourceMatch2Id.equals(tm._id)) {
-              nextMatch.set('teams.team2', winningParticipationId);
-            }
-            if (nextMatch.teams.team1 && nextMatch.teams.team2) {
-              nextMatch.status = 'Created';
-            }
-            await nextMatch.save();
-          }
-        }
-      }
-
-      // [KNOCKOUT RESULT UPDATE]
-      if (tm.roundName === 'Final' || tm.roundName === 'Semi Final') {
-        await updateCategoryResult(tm.categoryId);
-      }
-
-      return tm;
-    } catch (err) {
-      console.error("Completion Helper Error:", err);
-      return null;
-    }
-  };
-
-  // HELPER: Centralized Result Calculator for the Podium
-  const updateCategoryResult = async (categoryId) => {
-    try {
-      const category = await Category.findOne({ categoryId }).lean();
-      if (!category) return;
-
-      let resultData = {
-        categoryId,
-        categoryName: category.categoryName,
-        format: categoryId.startsWith('RR_') ? 'RoundRobin' : 'Knockout',
-        winner: '-',
-        runnerUp: '-',
-        semi1: '-',
-        semi2: '-'
-      };
-
-      if (resultData.format === 'RoundRobin') {
-        // Only push to Results table if every match in the league is finished
-        const incompleteCount = await TournamentMatch.countDocuments({ 
-          categoryId, 
-          status: { $nin: ['Completed', 'Forfeited', 'BYE'] } 
-        });
-
-        if (incompleteCount > 0) {
-          console.log(`[ResultUpdate] RR Category ${categoryId}: ${incompleteCount} matches remaining. Postponing podium push.`);
-          return;
-        }
-
-        // 1. Fetch Top 4 from Standings
-        const standings = await RoundRobinStanding.find({ categoryId }).sort({ points: -1, pointDifference: -1 }).limit(4).lean();
-        if (standings[0]) resultData.winner = standings[0].playerName;
-        if (standings[1]) resultData.runnerUp = standings[1].playerName;
-        if (standings[2]) resultData.semi1 = standings[2].playerName;
-        if (standings[3]) resultData.semi2 = standings[3].playerName;
-      } else {
-        // 2. Fetch from Knockout Matches
-        const matches = await TournamentMatch.find({ categoryId }).lean();
-        const participations = await Participation.find({ categoryId }).lean();
-        const players = await Player.find({}).lean();
-        const playerMap = players.reduce((acc, p) => { acc[p.profileId] = p.fullName; return acc; }, {});
-
-        const getTeamName = (pId) => {
-          const part = participations.find(p => p._id.toString() === pId?.toString());
-          if (!part) return 'TBD';
-          const p1 = playerMap[part.player1Id] || part.player1Id;
-          const p2 = part.player2Id ? (playerMap[part.player2Id] || part.player2Id) : null;
-          return p2 ? `${p1} / ${p2}` : p1;
-        };
-
-        const finalMatch = matches.find(m => m.roundName === 'Final');
-        if (finalMatch && (finalMatch.status === 'Completed' || finalMatch.status === 'Forfeited')) {
-          const winId = finalMatch.matchResult?.winner;
-          resultData.winner = winId === '1' ? getTeamName(finalMatch.teams.team1) : getTeamName(finalMatch.teams.team2);
-          resultData.runnerUp = winId === '1' ? getTeamName(finalMatch.teams.team2) : getTeamName(finalMatch.teams.team1);
-        }
-
-        const semiMatches = matches.filter(m => m.roundName === 'Semi Final');
-        const semiLosers = semiMatches.map(m => {
-          if (m.status === 'Completed' || m.status === 'Forfeited') {
-            const winId = m.matchResult?.winner;
-            return winId === '1' ? getTeamName(m.teams.team2) : getTeamName(m.teams.team1);
-          }
-          return '-';
-        }).filter(n => n !== '-' && n !== 'TBD');
-
-        resultData.semi1 = semiLosers[0] || '-';
-        resultData.semi2 = semiLosers[1] || '-';
-      }
-
-      await TournamentResult.findOneAndUpdate(
-        { categoryId },
-        { $set: resultData },
-        { upsert: true }
-      );
-      console.log(`[ResultUpdate] Category ${categoryId} updated in TournamentResult.`);
-    } catch (err) {
-      console.error("Update Result Error:", err);
-    }
-  };
-
-  // API: Forfeit Match manually from Scheduler
-  app.post('/api/scheduler/match/:matchId/forfeit', async (req, res) => {
-    const { matchId } = req.params;
-    const { forfeitingTeamId } = req.body; // 1 or 2
-
-    try {
-      const winnerId = (parseInt(forfeitingTeamId) === 1) ? 2 : 1;
-      const resultData = {
-        winner: String(winnerId),
-        finalScore: "Forfeit",
-        totalDurationMins: 0
-      };
-
-      const tm = await completeTournamentMatch(matchId, resultData, true);
-      if (!tm) return res.status(404).json({ success: false, message: 'Match not found' });
-
-      // Also clear the live 'Match' record if it exists
-      await Match.deleteOne({ tournamentMatchId: matchId });
-
-      io.emit('scheduler_update');
-      res.json({ success: true, message: 'Match forfeited successfully.' });
-    } catch (err) {
-      res.status(500).json({ success: false, error: err.message });
-    }
-  });
-
   // Event 5: Terminate / Finalize
   socket.on('complete_match', async ({ matchId, winner, winnerId, finalScore, durations }) => {
-    console.log(`[${socket.id}] complete_match triggered for matchId=${matchId}, winner=${winner}, winnerId=${winnerId}`);
+    console.log(`[${socket.id}] complete_match triggered for _id=${matchId}, winner=${winner}, winnerId=${winnerId}`);
     try {
       const match = await Match.findOneAndUpdate(
-        { matchId, lockedByDevice: socket.id },
+        { tournamentMatchId: matchId, lockedByDevice: socket.id },
         {
           $set: {
             status: 'Completed',

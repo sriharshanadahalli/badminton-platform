@@ -33,13 +33,16 @@ const SignageCourtPanel = ({ courtId }) => {
       }
 
       const backendUrl = CONFIG.BACKEND_URL;
+      console.log(`[Signage] Connecting to ${backendUrl} for courtId: "${courtId}"`);
       socket = io(backendUrl, {
          transports: ['websocket', 'polling'],
          reconnectionAttempts: 5
       });
-      socket.emit('spectate_court', { courtNumber: courtId });
+      socket.emit('spectate_court', { courtId });
+      console.log(`[Signage] Emitted spectate_court for "${courtId}"`);
       
       socket.on('spectator_update', ({ match, nextMatch, lastMatch }) => {
+         console.log(`[Signage] RECEIVED spectator_update for ${courtId}. MatchStatus: ${match?.status}, LastStatus: ${lastMatch?.status}`);
          if (match !== undefined) setLiveMatch(match);
          if (nextMatch !== undefined) setNextMatch(nextMatch);
          if (lastMatch !== undefined) setLastMatchData(lastMatch);
@@ -74,7 +77,7 @@ const SignageCourtPanel = ({ courtId }) => {
     return liveMatch;
   })();
 
-  const displayCourtName = courtId.replace('_', ' ').toUpperCase();
+  const displayCourtName = `COURT ${courtId}`;
 
   return (
     <div className="flex flex-col h-full bg-[#020617] p-2 space-y-2">

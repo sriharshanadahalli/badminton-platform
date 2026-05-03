@@ -144,7 +144,7 @@ const LiveScoreDisplay = ({ match, courtId }) => {
     return null;
   };
 
-  const displayCourtName = courtId ? courtId.replace('_', ' ').toUpperCase() : '';
+  const displayCourtName = courtId ? `COURT ${courtId}` : '';
 
   return (
     <div className="flex flex-col w-full h-full bg-[#020617] relative overflow-hidden">
@@ -153,7 +153,7 @@ const LiveScoreDisplay = ({ match, courtId }) => {
         <div className="flex items-center space-x-[1vw] border-l-2 border-indigo-500/40 pl-[1vw] overflow-hidden">
           {match ? (
             <div className="flex flex-col justify-center min-w-0">
-              <span className="text-indigo-400 font-bold text-[clamp(7px,0.8vh,10px)] uppercase tracking-[0.2em] whitespace-nowrap truncate">{match.category}</span>
+              <span className="text-indigo-400 font-bold text-[clamp(7px,0.8vh,10px)] uppercase tracking-[0.2em] whitespace-nowrap truncate">{match.categoryName}</span>
               <span className="text-slate-400 font-bold text-[clamp(7px,0.8vh,10px)] uppercase tracking-[0.2em] whitespace-nowrap truncate">{match.roundName}</span>
             </div>
           ) : (
@@ -172,8 +172,8 @@ const LiveScoreDisplay = ({ match, courtId }) => {
           {!match ? (
             <span className="text-slate-700 text-[9px] font-bold tracking-[0.2em] uppercase">Standby</span>
           ) : isCompleted ? (
-            <div className={`flex items-center justify-center border px-[1.5vw] py-[0.5vh] rounded-full min-w-[8vw] ${match.status === 'Forfeited' ? 'bg-amber-500/10 border-amber-500/30' : 'bg-emerald-500/10 border-emerald-500/30'}`}>
-              <span className={`${match.status === 'Forfeited' ? 'text-amber-400' : 'text-emerald-400'} font-black animate-pulse text-[9px] tracking-[0.3em] uppercase block text-center`}>
+            <div className={`flex items-center justify-center border px-[1.5vw] py-[0.5vh] rounded-full min-w-[8vw] ${match.status === 'Forfeited' ? 'bg-rose-500/10 border-rose-500/30' : 'bg-emerald-500/10 border-emerald-500/30'}`}>
+              <span className={`${match.status === 'Forfeited' ? 'text-rose-400' : 'text-emerald-400'} font-black animate-pulse text-[9px] tracking-[0.3em] uppercase block text-center`}>
                 {match.status === 'Forfeited' ? 'FORFEITED' : 'COMPLETED'}
               </span>
             </div>
@@ -232,10 +232,10 @@ const LiveScoreDisplay = ({ match, courtId }) => {
                       </div>
                     ) : getPointStatus(1) ? (
                       <div className={`inline-flex items-center px-[0.8vw] py-[0.3vh] rounded font-black text-[9px] italic tracking-[0.25em] animate-pulse uppercase whitespace-nowrap border ${getPointStatus(1) === 'GOLDEN POINT'
-                          ? 'bg-amber-500/10 border-amber-500/30 text-amber-500'
-                          : getPointStatus(1) === 'GAME POINT'
-                            ? 'bg-cyan-500/10 border-cyan-500/30 text-cyan-400'
-                            : 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400'
+                        ? 'bg-amber-500/10 border-amber-500/30 text-amber-500'
+                        : getPointStatus(1) === 'GAME POINT'
+                          ? 'bg-cyan-500/10 border-cyan-500/30 text-cyan-400'
+                          : 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400'
                         }`}>
                         {getPointStatus(1)}
                       </div>
@@ -293,10 +293,10 @@ const LiveScoreDisplay = ({ match, courtId }) => {
                       </div>
                     ) : getPointStatus(2) ? (
                       <div className={`inline-flex items-center px-[0.8vw] py-[0.3vh] rounded font-black text-[9px] italic tracking-[0.25em] animate-pulse uppercase whitespace-nowrap border ${getPointStatus(2) === 'GOLDEN POINT'
-                          ? 'bg-amber-500/10 border-amber-500/30 text-amber-500'
-                          : getPointStatus(2) === 'GAME POINT'
-                            ? 'bg-cyan-500/10 border-cyan-500/30 text-cyan-400'
-                            : 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400'
+                        ? 'bg-amber-500/10 border-amber-500/30 text-amber-500'
+                        : getPointStatus(2) === 'GAME POINT'
+                          ? 'bg-cyan-500/10 border-cyan-500/30 text-cyan-400'
+                          : 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400'
                         }`}>
                         {getPointStatus(2)}
                       </div>

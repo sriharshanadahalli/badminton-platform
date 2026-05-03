@@ -48,9 +48,10 @@ const options = {
         TournamentMatch: {
           type: 'object',
           properties: {
-            matchId: { type: 'string' },
+            _id: { type: 'string' },
             categoryId: { type: 'string' },
-            round: { type: 'number' },
+            roundNumber: { type: 'number' },
+            roundName: { type: 'string' },
             matchIndex: { type: 'number' },
             status: { 
               type: 'string', 

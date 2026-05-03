@@ -2,7 +2,7 @@ const mongoose = require('mongoose');
 
 const TournamentMatchSchema = new mongoose.Schema({
   categoryId: { type: String, required: true, set: v => v ? v.toUpperCase() : v },
-  round: { type: Number, required: true },
+  roundNumber: { type: Number, required: true },
   roundName: { type: String, default: null },
   matchIndex: { type: Number, required: true },
   
@@ -25,7 +25,7 @@ const TournamentMatchSchema = new mongoose.Schema({
   // Status & Progress
   status: { 
     type: String, 
-    enum: ['TBD', 'Created', 'Assigned', 'Scheduled', 'Started', 'In Progress', 'Completed', 'Forfeited', 'BYE'], 
+    enum: ['TBD', 'Created', 'Assigned', 'Scheduled', 'In Progress', 'Completed', 'Forfeited', 'BYE'], 
     default: 'TBD' 
   },
   winnerMatchId: { type: mongoose.Schema.Types.ObjectId, ref: 'TournamentMatch', default: null },
@@ -40,6 +40,6 @@ const TournamentMatchSchema = new mongoose.Schema({
 }, { timestamps: true });
 
 // Create indexes for fast retrieval of bracket structures
- TournamentMatchSchema.index({ categoryId: 1, round: 1, matchIndex: 1 });
+ TournamentMatchSchema.index({ categoryId: 1, roundNumber: 1, matchIndex: 1 });
 
 module.exports = mongoose.model('TournamentMatch', TournamentMatchSchema);

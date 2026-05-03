@@ -25,10 +25,13 @@ const CourtView = () => {
   }
 
   if (error) {
+    const isNoMatch = error.includes("No match assigned");
     return (
       <div className="min-h-screen bg-gray-900 flex flex-col items-center justify-center p-4">
         <div className="bg-red-900/40 border border-red-500/50 p-6 rounded-xl max-w-md text-center shadow-2xl">
-          <h2 className="text-xl font-bold text-red-400 mb-2">Access Denied</h2>
+          <h2 className="text-xl font-bold text-red-400 mb-2">
+            {isNoMatch ? "Match Unavailable" : "Access Denied"}
+          </h2>
           <p className="text-gray-300">{error}</p>
           <a href="/" className="mt-6 inline-block bg-gray-800 hover:bg-gray-700 text-white px-6 py-2 rounded-lg transition">Back to Courts</a>
         </div>

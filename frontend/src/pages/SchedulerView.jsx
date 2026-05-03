@@ -681,7 +681,7 @@ const SchedulerView = () => {
                                                         </td>
                                                         <td className="px-8 py-5">
                                                             <button
-                                                                onClick={() => jumpToMatch(entry.categoryId, entry.matchId)}
+                                                                onClick={() => jumpToMatch(entry.categoryId, entry._id)}
                                                                 className="px-3 py-1 rounded-full bg-amber-500/10 text-amber-500 text-[10px] font-black border border-amber-500/20 uppercase tracking-widest hover:bg-amber-500 hover:text-slate-900 transition-all cursor-pointer flex items-center group/btn"
                                                             >
                                                                 {entry.categoryName}
@@ -772,9 +772,9 @@ const SchedulerView = () => {
                                                         <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" />
                                                         <span className="text-[10px] font-black text-slate-500 uppercase tracking-[0.3em]">Current Match</span>
                                                     </div>
-                                                    {court.activeMatch?.category && (
+                                                    {court.activeMatch?.categoryName && (
                                                         <span className="text-[10px] font-black text-amber-500/60 uppercase tracking-widest italic truncate max-w-[200px]">
-                                                            {court.activeMatch.category}
+                                                            {court.activeMatch.categoryName}
                                                         </span>
                                                     )}
                                                 </div>
@@ -804,9 +804,9 @@ const SchedulerView = () => {
                                                         <span className="w-1.5 h-1.5 rounded-full bg-indigo-500" />
                                                         <span className="text-[10px] font-black text-slate-500 uppercase tracking-[0.3em]">Upcoming Match</span>
                                                     </div>
-                                                    {court.upcomingMatch?.category && (
+                                                    {court.upcomingMatch?.categoryName && (
                                                         <span className="text-[10px] font-black text-indigo-500/60 uppercase tracking-widest italic truncate max-w-[200px]">
-                                                            {court.upcomingMatch.category}
+                                                            {court.upcomingMatch.categoryName}
                                                         </span>
                                                     )}
                                                 </div>
@@ -1051,7 +1051,11 @@ const EditMatchModal = ({ match, onClose, onSave, participants, courts }) => {
         if (match.teams && typeof match.teams.team1 === 'string') return match.teams;
         return { team1: null, team2: null };
     });
-    const [params, setParams] = useState(match.parameters || { gamesPerMatch: 3, pointsPerGame: 21, goldenPointAt: 20 });
+    const [params, setParams] = useState({
+        gamesPerMatch: match.gamesPerMatch || 3,
+        pointsPerGame: match.pointsPerGame || 21,
+        goldenPointAt: match.goldenPointAt || 20
+    });
     const [courtId, setCourtId] = useState(match.courtId || '');
     const [saving, setSaving] = useState(false);
     const [validationError, setValidationError] = useState(null);
@@ -1101,7 +1105,7 @@ const EditMatchModal = ({ match, onClose, onSave, participants, courts }) => {
                 <div className="p-8 border-b border-white/5 flex items-center justify-between">
                     <div>
                         <h3 className="text-xl font-black uppercase italic tracking-widest text-white">Edit Match Configuration</h3>
-                        <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mt-1">{match.roundName || `Round ${match.round}`} | Slot {match.matchIndex + 1}</p>
+                        <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mt-1">{match.roundName || `Round ${match.roundNumber}`} | Slot {match.matchIndex + 1}</p>
                     </div>
                     <button onClick={onClose} className="p-2 hover:bg-white/5 rounded-full transition-colors text-slate-400 hover:text-white">
                         <Plus className="w-6 h-6 rotate-45" />

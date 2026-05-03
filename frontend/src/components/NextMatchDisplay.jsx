@@ -18,7 +18,7 @@ const NextMatchDisplay = ({ matchConfig }) => {
     <div className="flex flex-col w-full h-full bg-slate-900/10">
       {/* Centered Header */}
       <div className="h-[4vh] bg-slate-800/40 border-b border-slate-700/30 flex justify-center items-center text-[8px] font-black text-slate-500 uppercase tracking-[0.4em] px-4">
-        <span className="truncate">UP NEXT • {matchConfig.category} • {matchConfig.roundName}</span>
+        <span className="truncate">UP NEXT • {matchConfig.categoryName} • {matchConfig.roundName}</span>
       </div>
 
       {/* Centered Players */}

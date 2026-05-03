@@ -8,7 +8,6 @@ const MatchStatusBadge = ({ status }) => {
         Created: 'bg-indigo-500/10 text-indigo-400 border-indigo-500/20',
         Assigned: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30 shadow-[0_0_10px_rgba(16,185,129,0.05)]',
         Scheduled: 'bg-amber-500/10 text-amber-500 border-amber-500/30 shadow-[0_0_10px_rgba(245,158,11,0.1)]',
-        Started: 'bg-amber-500/10 text-amber-400 border-amber-500/20',
         'In Progress': 'bg-red-500/10 text-red-500 border-red-500/30 shadow-[0_0_10px_rgba(239,68,68,0.1)]',
         Completed: 'bg-blue-500/10 text-blue-400 border-blue-500/30 shadow-[0_0_10px_rgba(59,130,246,0.05)]',
         Forfeited: 'bg-rose-500/10 text-rose-400 border-rose-500/30'
@@ -18,7 +17,6 @@ const MatchStatusBadge = ({ status }) => {
         Created: 'Created',
         Assigned: 'Assigned',
         Scheduled: 'Queued',
-        Started: 'Started',
         'In Progress': 'Live',
         Completed: 'Finished',
         Forfeited: 'Forfeited'
@@ -33,8 +31,9 @@ const MatchStatusBadge = ({ status }) => {
 
 const BracketCard = ({ match, onEdit, onUpdate, onForfeit, isHighlighted, setGlobalError }) => {
     const isBye = match.status === 'BYE';
-    const isLocked = ['Completed', 'Forfeited'].includes(match.status);
-    const isLive = ['In Progress', 'Started'].includes(match.status);
+    const isSettingsLocked = ['Completed', 'Forfeited', 'In Progress'].includes(match.status);
+    const isFinalized = ['Completed', 'Forfeited'].includes(match.status);
+    const isLive = ['In Progress'].includes(match.status);
     const status = match.status || 'Assigned'; // Explicitly fallback if undefined
 
     const handleCourtChange = async (courtId) => {
@@ -111,9 +110,9 @@ const BracketCard = ({ match, onEdit, onUpdate, onForfeit, isHighlighted, setGlo
             )}
             <div className="bg-slate-800/40 pl-3 pr-5 flex items-center justify-between border-b border-white/5 min-h-[56px] shrink-0">
                 <div className="w-[140px] flex flex-col text-[8px] font-black text-slate-500 uppercase leading-tight tracking-wider">
-                    <span>Games per Match: {match.parameters?.gamesPerMatch || 3}</span>
-                    <span>Points per Game: {match.parameters?.pointsPerGame || 21}</span>
-                    <span>Golden Point @ {match.parameters?.goldenPointAt || 20}</span>
+                    <span>Games per Match: {match.gamesPerMatch || 3}</span>
+                    <span>Points per Game: {match.pointsPerGame || 21}</span>
+                    <span>Golden Point @ {match.goldenPointAt || 20}</span>
                 </div>
                 <div className="flex-1 flex flex-col items-center justify-center">
                     {match.courtId ? (
@@ -171,18 +170,18 @@ const BracketCard = ({ match, onEdit, onUpdate, onForfeit, isHighlighted, setGlo
                 {/* Right Section: Settings Gear - flex-1 balances left */}
                 <div className="flex-1 flex items-center justify-end">
                     <button
-                        disabled={isLocked}
+                        disabled={isSettingsLocked}
                         onClick={() => onEdit(match)}
-                        className={'p-2 rounded-xl transition-all border shadow-lg shadow-black/20 ' + (isLocked ? 'bg-slate-800/20 text-slate-700 border-white/5 cursor-not-allowed' : 'bg-slate-800/50 hover:bg-amber-500/20 text-amber-500/90 hover:text-amber-400 border-white/5 hover:border-amber-500/50')}
+                        className={'p-2 rounded-xl transition-all border shadow-lg shadow-black/20 ' + (isSettingsLocked ? 'bg-slate-800/20 text-slate-700 border-white/5 cursor-not-allowed' : 'bg-slate-800/50 hover:bg-amber-500/20 text-amber-500/90 hover:text-amber-400 border-white/5 hover:border-amber-500/50')}
                     >
                         <Settings className="w-4 h-4" />
                     </button>
                     {!isBye && (
                         <button
-                            disabled={isLocked || status === 'TBD'}
+                            disabled={isFinalized || status === 'TBD'}
                             onClick={() => onForfeit(match)}
-                            title={isLocked ? "Match finalized" : isLive ? "Forfeit Live Match" : status === "TBD" ? "Waiting for teams to forfeit" : "Forfeit Match"}
-                            className={'p-2 ml-2 rounded-xl transition-all border ' + ((isLocked || status === 'TBD') ? 'bg-slate-800/20 text-slate-700 border-white/5 cursor-not-allowed' : isLive ? 'bg-rose-500/10 hover:bg-rose-500/30 text-rose-500 border-rose-500/20 hover:border-rose-500/50' : 'bg-slate-800/50 hover:bg-rose-500/20 text-rose-500/70 hover:text-rose-400 border-white/5 hover:border-rose-500/50')}
+                            title={isFinalized ? "Match finalized" : isLive ? "Forfeit Live Match" : status === "TBD" ? "Waiting for teams to forfeit" : "Forfeit Match"}
+                            className={'p-2 ml-2 rounded-xl transition-all border ' + ((isFinalized || status === 'TBD') ? 'bg-slate-800/20 text-slate-700 border-white/5 cursor-not-allowed' : isLive ? 'bg-rose-500/10 hover:bg-rose-500/30 text-rose-500 border-rose-500/20 hover:border-rose-500/50' : 'bg-slate-800/50 hover:bg-rose-500/20 text-rose-500/70 hover:text-rose-400 border-white/5 hover:border-rose-500/50')}
                         >
                             <AlertCircle className="w-4 h-4" />
                         </button>

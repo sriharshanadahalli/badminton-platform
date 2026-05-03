@@ -46,7 +46,7 @@ const LandingView = () => {
               key={courtNum}
               whileHover={{ scale: 1.05, y: -2 }}
               whileTap={{ scale: 0.95 }}
-              onClick={() => navigate(`/court/court_${courtNum.toString().padStart(2, '0')}`)}
+              onClick={() => navigate(`/court/${courtNum.toString().padStart(2, '0')}`)}
               className="group relative flex flex-col items-center justify-center w-[calc(20%-0.6rem)] lg:w-[calc(20%-1.2rem)] h-[22vh] lg:h-auto lg:aspect-square bg-gray-800/90 backdrop-blur-md rounded-xl md:rounded-2xl lg:rounded-3xl border border-gray-700/60 hover:border-emerald-500 active:border-emerald-500 shadow-lg overflow-hidden transition-all duration-300"
             >
               {/* Subtle hover gradient */}

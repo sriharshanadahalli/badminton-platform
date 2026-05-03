@@ -82,8 +82,6 @@ export const MatchProvider = ({ children }) => {
       data.noOfGames = data.gamesPerMatch;
       data.team1Name = data.teams.team1.players.map(p => p.fullName).join(' / ');
       data.team2Name = data.teams.team2.players.map(p => p.fullName).join(' / ');
-      data.category = data.categoryName;
-      data.categoryId = data.category;
 
       setPointArrays({ "team1": [], "team2": [] });
 
@@ -175,7 +173,7 @@ export const MatchProvider = ({ children }) => {
 
        const pathParts = window.location.pathname.split('/');
        const cId = pathParts[pathParts.length - 1];
-       if (cId && cId.startsWith('court_')) {
+       if (cId) {
          console.log(`[Socket] Refreshing court ${cId} due to admin reload...`);
          fetchMatchData(cId);
        }
@@ -188,21 +186,20 @@ export const MatchProvider = ({ children }) => {
        setMatch(null);
     });
 
-    socket.on('connect', () => {
-      console.log("[Socket] Reconnected to backend.");
-      const pathParts = window.location.pathname.split('/');
-      const cId = pathParts[pathParts.length - 1];
-      if (cId && cId.startsWith('court_')) {
-        socket.emit('subscribe_to_court', { courtId: cId });
+    const setupSubscription = () => {
+      const path = window.location.pathname;
+      if (path.startsWith('/court/')) {
+        const parts = path.split('/');
+        const cId = parts[parts.length - 1];
+        if (cId) {
+          console.log(`[MatchContext] Subscribing to court status: ${cId}`);
+          socket.emit('subscribe_to_court', { courtId: cId });
+        }
       }
-    });
+    };
 
-    // Initial subscription
-    const pathParts = window.location.pathname.split('/');
-    const cId = pathParts[pathParts.length - 1];
-    if (cId && cId.startsWith('court_')) {
-      socket.emit('subscribe_to_court', { courtId: cId });
-    }
+    socket.on('connect', setupSubscription);
+    setupSubscription();
 
     return () => {
       socket.off('court_reloaded', handleReload);
@@ -285,7 +282,7 @@ export const MatchProvider = ({ children }) => {
         const tossWinnerName = w === 1 ? match.team1Name : (w === 2 ? match.team2Name : null);
         
         socket.emit('start_match', { 
-          matchId: match.matchId, 
+          matchId: match._id, 
           tossWinnerId: w ? String(w) : null, // team index "1" or "2"
           tossWinner: tossWinnerName, 
           servingPlayerId: s?.id,
@@ -427,7 +424,7 @@ export const MatchProvider = ({ children }) => {
        if (socket) {
           // Sync point immediately but state it is NOT game over yet
           socket.emit('sync_live_state', {
-             matchId: match.matchId,
+             matchId: match._id,
              activeGameIndex: currentGame - 1,
              gameSnapshot: {
                 accumulatedScores: { team1: newTeam1Score, team2: newTeam2Score },
@@ -444,7 +441,7 @@ export const MatchProvider = ({ children }) => {
       // Normal point sync
       if (socket) {
          socket.emit('sync_live_state', {
-            matchId: match.matchId,
+            matchId: match._id,
             activeGameIndex: currentGame - 1,
             gameSnapshot: {
                accumulatedScores: { team1: newTeam1Score, team2: newTeam2Score },
@@ -469,7 +466,7 @@ export const MatchProvider = ({ children }) => {
 
     if (socket) {
         socket.emit('sync_live_state', {
-            matchId: match.matchId,
+            matchId: match._id,
             activeGameIndex: currentGame - 1,
             gameSnapshot: {
                accumulatedScores: { team1: team1Score, team2: team2Score },
@@ -484,7 +481,7 @@ export const MatchProvider = ({ children }) => {
         if (matchCompleted) {
             const matchWinnerName = winnerId === 1 ? match.team1Name : match.team2Name;
             socket.emit('complete_match', {
-               matchId: match.matchId,
+               matchId: match._id,
                winner: matchWinnerName,
                winnerId: winnerId,
                finalScore: `${currentWins.team1} - ${currentWins.team2}`,
@@ -516,7 +513,7 @@ export const MatchProvider = ({ children }) => {
     // 3. Immediately broadcast the reverted state to signage/backends
     if (socket) {
       socket.emit('sync_live_state', {
-         matchId: match.matchId,
+         matchId: match._id,
          activeGameIndex: currentGame - 1,
          gameSnapshot: {
             accumulatedScores: undoState.scores,
@@ -564,18 +561,18 @@ export const MatchProvider = ({ children }) => {
     
     // Reset point arrays for next game internally
     setPointArrays({
-      [match.team1Name]: [],
-      [match.team2Name]: []
+      "team1": [],
+      "team2": []
     });
 
     if (socket) {
-       socket.emit('start_next_game', { matchId: match.matchId, newGameNumber: currentGame + 1 });
+       socket.emit('start_next_game', { matchId: match._id, newGameNumber: currentGame + 1 });
     }
   };
 
   const generateMatchJSON = () => {
     return {
-      matchID: match.matchID,
+      matchId: match._id,
       duration: matchTimer.formatTime(true),
       gamesPlayed: gameHistory.length,
       history: gameHistory,

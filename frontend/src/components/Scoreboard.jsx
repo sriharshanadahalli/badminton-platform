@@ -72,16 +72,16 @@ const Scoreboard = () => {
 
       {/* Category/Round Info - Top Center */}
       <div className={`${widgetClass} flex-col px-2 md:px-6 flex-1 max-w-[200px] md:max-w-md items-center justify-center text-center gap-0.5 md:gap-1 overflow-hidden`}>
-        {match.category && (
-          <h2 className="text-[10px] md:text-sm font-black bg-clip-text text-transparent bg-gradient-to-r from-emerald-400 to-cyan-400 tracking-wider uppercase leading-tight truncate w-full px-2" title={match.category}>
-            {match.category}
+        {match.categoryName && (
+          <h2 className="text-[10px] md:text-sm font-black bg-clip-text text-transparent bg-gradient-to-r from-emerald-400 to-cyan-400 tracking-wider uppercase leading-tight truncate w-full px-2" title={match.categoryName}>
+            {match.categoryName}
           </h2>
         )}
 
         <div className="flex flex-col items-center justify-center -space-y-0.5">
-          {match.round && (
+          {match.roundName && (
             <div className="text-[8px] md:text-[10px] text-white/90 font-mono font-bold tracking-[0.2em] uppercase px-2 py-0.5 bg-slate-800/80 rounded border border-slate-700/50 shadow-inner scale-90 md:scale-100">
-              {match.round}
+              {match.roundName}
             </div>
           )}
 

@@ -6,7 +6,7 @@ import { CONFIG } from '../utils/config';
 
 const MobileLiveScore = () => {
   const [viewMode, setViewMode] = useState('live'); // 'live' or 'upcoming'
-  const courts = CONFIG.COURTS.map(c => `court_${c}`);
+  const courts = CONFIG.COURTS;
 
   return (
     <div className="min-h-screen bg-[#020617] text-slate-100 flex flex-col selection:bg-emerald-500/30 overflow-x-hidden">
