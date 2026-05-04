@@ -29,7 +29,11 @@ versions/
 *.sln
 *.sw?
 scratch/
+backend/scripts/
 cleanup_db.js
 extract_logs.py
 test_api.js
 check_api.js
+backend/check_courts.js
+backend/check_db.js
+backend/check_live_matches.js

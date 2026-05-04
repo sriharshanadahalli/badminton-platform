@@ -544,6 +544,23 @@ app.get('/api/scheduler/view', async (req, res) => {
 });
 
 // Dedicated endpoint for fetching ALL registered players for selection modals
+/**
+ * @openapi
+ * /api/scheduler/all-players:
+ *   get:
+ *     summary: Get all players for scheduler setup
+ *     tags: [Scheduler]
+ *     responses:
+ *       200:
+ *         description: Success
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success: { type: boolean }
+ *                 data: { type: array, items: { $ref: '#/components/schemas/Player' } }
+ */
 app.get('/api/scheduler/all-players', async (req, res) => {
   try {
     const players = await Player.find({}).sort({ fullName: 1 }).lean();
@@ -913,7 +930,7 @@ app.get('/api/scheduler/round-robin/standings/:categoryId', async (req, res) => 
  * /api/scheduler/generate-round-robin:
  *   post:
  *     summary: Generate round-robin league for a category
- *     tags: [Brackets]
+ *     tags: [Scheduler]
  *     requestBody:
  *       required: true
  *       content:
@@ -921,8 +938,8 @@ app.get('/api/scheduler/round-robin/standings/:categoryId', async (req, res) => 
  *           schema:
  *             type: object
  *             properties:
- *               categoryName: { type: string }
- *               playerIds: { type: array, items: { type: string } }
+ *               categoryName: { type: string, description: 'Raw category name (prefix RR_ will be added)' }
+ *               playerIds: { type: array, items: { type: string }, description: 'Array of Player profile IDs' }
  *     responses:
  *       200:
  *         description: Success
@@ -1004,6 +1021,21 @@ app.post('/api/scheduler/generate-round-robin', async (req, res) => {
   }
 });
 
+/**
+ * @openapi
+ * /api/scheduler/bracket-view/{categoryId}:
+ *   get:
+ *     summary: Get bracket data with real-time availability
+ *     tags: [Scheduler]
+ *     parameters:
+ *       - in: path
+ *         name: categoryId
+ *         required: true
+ *         schema: { type: string }
+ *     responses:
+ *       200:
+ *         description: Success
+ */
 app.get('/api/scheduler/bracket-view/:categoryId', async (req, res) => {
   const { categoryId } = req.params;
   try {

@@ -25,6 +25,9 @@ const options = {
           properties: {
             profileId: { type: 'string', description: 'Unique identifier for the player' },
             fullName: { type: 'string', description: 'Full name of the player' },
+            lastPlayedAt: { type: 'string', format: 'date-time', description: 'Latest finished match time' },
+            isLive: { type: 'boolean', description: 'Is currently on court' },
+            isQueued: { type: 'boolean', description: 'Is waiting for a match' },
           },
         },
         Category: {
@@ -63,6 +66,14 @@ const options = {
               properties: {
                 team1: { type: 'string', description: 'Participation ID for Team 1' },
                 team2: { type: 'string', description: 'Participation ID for Team 2' },
+              },
+            },
+            parameters: {
+              type: 'object',
+              properties: {
+                gamesPerMatch: { type: 'number' },
+                pointsPerGame: { type: 'number' },
+                goldenPointAt: { type: 'number' },
               },
             },
             winner: { type: 'string' },
