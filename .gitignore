@@ -28,3 +28,8 @@ versions/
 *.njsproj
 *.sln
 *.sw?
+scratch/
+cleanup_db.js
+extract_logs.py
+test_api.js
+check_api.js
