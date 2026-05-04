@@ -76,6 +76,19 @@ app.get('/api/scheduler/courts', async (req, res) => {
 
 
 // Global Helpers for Match Data Mapping
+const getSubstantialName = (fullName) => {
+  if (!fullName) return '';
+  const parts = fullName.trim().split(/\s+/);
+  if (parts.length <= 1) return fullName;
+  let res = parts[0];
+  let i = 1;
+  while (res.length < 3 && i < parts.length) {
+    res += ' ' + parts[i];
+    i++;
+  }
+  return res;
+};
+
 const resolvePlayer = (id, playerMap) => playerMap[id] || { id, fullName: id, firstName: id.split(' ')[0] };
 const resolveCategory = (id, catMap) => catMap[id] || id;
 
@@ -115,7 +128,14 @@ const mapMatchDataGlobal = async (matchInput, preFetchedData = null, includePoin
 
     const resolvePlayer = (pId, map) => {
       const p = map[pId];
-      return p ? { id: p.id, fullName: p.fullName, firstName: p.firstName } : null;
+      return p ? {
+        id: p.id,
+        fullName: p.fullName,
+        firstName: getSubstantialName(p.fullName),
+        lastPlayedAt: p.lastPlayedAt,
+        isLive: p.isLive || false,
+        isQueued: p.isQueued || false
+      } : null;
     };
 
     const resolveCategory = (cId, map) => map[cId] || 'Match';
@@ -177,7 +197,7 @@ const mapMatchDataGlobal = async (matchInput, preFetchedData = null, includePoin
   ]);
 
   const playerMap = playersMapDoc.reduce((acc, p) => {
-    acc[p.profileId] = { id: p.profileId, fullName: p.fullName, firstName: p.fullName.split(' ')[0] };
+    acc[p.profileId] = { id: p.profileId, fullName: p.fullName, firstName: getSubstantialName(p.fullName) };
     return acc;
   }, {});
 
@@ -294,7 +314,7 @@ app.get('/api/court_status/:courtId', async (req, res) => {
     const { courtId } = req.params;
     const court = await Court.findOne({ courtId: String(courtId).padStart(2, '0') })
       .populate('activeMatchId upcomingMatchId').lean();
-    
+
     if (!court) {
       console.error(`[Broadcast] Court ${courtId} not found for update!`);
       return res.json({ success: false, message: 'Court not found' });
@@ -303,31 +323,31 @@ app.get('/api/court_status/:courtId', async (req, res) => {
     console.log(`[Court Status] Court ${court.courtId} | Mode: ${isLean ? 'Lean' : 'Full'}`);
 
     let mappedMatch = await mapMatchDataGlobal(court.activeMatchId, null, true);
-    
+
     // Conditional logic for Lean Mode optimization
     let mappedNextMatch = null;
     let mappedLastMatch = null;
 
     if (!isLean) {
-        mappedNextMatch = await mapMatchDataGlobal(court.upcomingMatchId);
-        
-        // Visibility check for non-lean modes
-        if (mappedMatch && !['Assigned', 'Scheduled', 'Started', 'In Progress', 'Completed', 'Forfeited'].includes(mappedMatch.status)) {
-            mappedMatch = null;
-        }
+      mappedNextMatch = await mapMatchDataGlobal(court.upcomingMatchId);
 
-        if (!mappedMatch) {
-            const legacyMatch = await Match.findOne({ courtId }).sort({ createdAt: -1 });
-            if (legacyMatch && ['Started', 'In Progress'].includes(legacyMatch.status)) {
-                mappedMatch = legacyMatch;
-            }
-        }
+      // Visibility check for non-lean modes
+      if (mappedMatch && !['Assigned', 'Scheduled', 'Started', 'In Progress', 'Completed', 'Forfeited'].includes(mappedMatch.status)) {
+        mappedMatch = null;
+      }
 
-        const lastMatch = await TournamentMatch.findOne({
-            courtId,
-            status: { $in: ['Completed', 'Forfeited'] }
-        }).sort({ updatedAt: -1 }).lean();
-        mappedLastMatch = lastMatch ? await mapMatchDataGlobal(lastMatch) : null;
+      if (!mappedMatch) {
+        const legacyMatch = await Match.findOne({ courtId }).sort({ createdAt: -1 });
+        if (legacyMatch && ['Started', 'In Progress'].includes(legacyMatch.status)) {
+          mappedMatch = legacyMatch;
+        }
+      }
+
+      const lastMatch = await TournamentMatch.findOne({
+        courtId,
+        status: { $in: ['Completed', 'Forfeited'] }
+      }).sort({ updatedAt: -1 }).lean();
+      mappedLastMatch = lastMatch ? await mapMatchDataGlobal(lastMatch) : null;
     }
 
     return res.json({
@@ -370,12 +390,18 @@ async function calculateAvailability() {
   });
 
   const playerMatchCount = {};
+  const lastPlayedMap = {};
   matches.forEach(m => {
     if (['Completed', 'Forfeited'].includes(m.status)) {
       const p1 = getPlayerIds(m.teams?.team1);
       const p2 = getPlayerIds(m.teams?.team2);
       [...p1, ...p2].forEach(id => {
         playerMatchCount[id] = (playerMatchCount[id] || 0) + 1;
+        const currentLast = lastPlayedMap[id];
+        const finishTime = m.updatedAt || m.createdAt;
+        if (!currentLast || new Date(finishTime) > new Date(currentLast)) {
+          lastPlayedMap[id] = finishTime;
+        }
       });
     }
   });
@@ -400,6 +426,7 @@ async function calculateAvailability() {
             matchType: t1Ids.length > 1 ? 'Doubles' : 'Singles',
             partnerName: t1Ids.length > 1 ? (playerMap[t1Ids.find((_, i) => i !== idx)] || t1Ids.find((_, i) => i !== idx)) : null,
             matchesPlayed: playerMatchCount[id] || 0,
+            lastPlayedAt: lastPlayedMap[id] || null,
             roundName: m.roundName || `Round ${m.roundNumber}`
           });
         });
@@ -413,6 +440,7 @@ async function calculateAvailability() {
             matchType: t2Ids.length > 1 ? 'Doubles' : 'Singles',
             partnerName: t2Ids.length > 1 ? (playerMap[t2Ids.find((_, i) => i !== idx)] || t2Ids.find((_, i) => i !== idx)) : null,
             matchesPlayed: playerMatchCount[id] || 0,
+            lastPlayedAt: lastPlayedMap[id] || null,
             roundName: m.roundName || `Round ${m.roundNumber}`
           });
         });
@@ -515,6 +543,20 @@ app.get('/api/scheduler/view', async (req, res) => {
   }
 });
 
+// Dedicated endpoint for fetching ALL registered players for selection modals
+app.get('/api/scheduler/all-players', async (req, res) => {
+  try {
+    const players = await Player.find({}).sort({ fullName: 1 }).lean();
+    const formatted = players.map(p => ({
+      id: p.profileId,
+      name: p.fullName
+    }));
+    res.json({ success: true, data: formatted });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
 
 
 /**
@@ -547,6 +589,7 @@ app.get('/api/scheduler/summary', async (req, res) => {
         total: realMatches.length,
         completed: realMatches.filter(m => m.status === 'Completed' || m.status === 'Forfeited').length,
         ongoing: realMatches.filter(m => m.status === 'In Progress').length,
+        remaining: realMatches.filter(m => !['Completed', 'Forfeited'].includes(m.status)).length,
         playersAvailable: uniquePlayers.size
       };
     }));
@@ -567,10 +610,10 @@ app.get('/api/scheduler/results', async (req, res) => {
 
 app.get('/api/scheduler/completed-matches', async (req, res) => {
   try {
-    const matches = await TournamentMatch.find({ 
-      status: { $in: ['Completed', 'Forfeited'] } 
+    const matches = await TournamentMatch.find({
+      status: { $in: ['Completed', 'Forfeited'] }
     }).sort({ updatedAt: -1 }).lean();
-    
+
     // Efficiently map all matches
     const mappedMatches = await Promise.all(matches.map(async m => {
       return await mapMatchDataGlobal(m, null, true);
@@ -903,12 +946,13 @@ app.post('/api/scheduler/generate-round-robin', async (req, res) => {
     );
 
     // 2. Fetch Player Details
-    const players = await Player.find({ profileId: { $in: playerIds } }).lean();
+    const validPlayerIds = (playerIds || []).filter(Boolean);
+    const players = await Player.find({ profileId: { $in: validPlayerIds } }).lean();
     const playerMap = players.reduce((acc, p) => { acc[p.profileId] = p.fullName; return acc; }, {});
 
     // 3. Resolve Participations (Tied to THIS categoryId)
     const participations = [];
-    for (const pId of playerIds) {
+    for (const pId of validPlayerIds) {
       let partic = await Participation.findOne({ categoryId, player1Id: pId, player2Id: null });
       if (!partic) {
         partic = await Participation.create({ categoryId, player1Id: pId, player2Id: null });
@@ -1003,10 +1047,102 @@ app.get('/api/scheduler/bracket-view/:categoryId', async (req, res) => {
     ]);
     console.timeEnd(`[BracketView] ${categoryId} - FetchData`);
 
+    // 5b. Targeted lookup for last played time (REST TIMER LOGIC)
+    console.time(`[BracketView] ${categoryId} - RestTimers`);
+    const playerParticipations = await Participation.find({
+      $or: [
+        { player1Id: { $in: Array.from(uniqueProfileIds) } },
+        { player2Id: { $in: Array.from(uniqueProfileIds) } }
+      ]
+    }).lean();
+    const participationIds = playerParticipations.map(p => p._id);
+
+    const [historicalMatches, activeMatches] = await Promise.all([
+      TournamentMatch.find({
+        $or: [
+          { "teams.team1": { $in: participationIds } },
+          { "teams.team2": { $in: participationIds } }
+        ],
+        status: { $in: ['Completed', 'Forfeited'] }
+      }).sort({ updatedAt: -1 }).lean(),
+      TournamentMatch.find({
+        status: { $in: ['Scheduled', 'Started', 'In Progress', 'Assigned'] }
+      }).lean()
+    ]);
+
+    const activePartIds = new Set();
+    activeMatches.forEach(m => {
+      if (m.teams?.team1) activePartIds.add(m.teams.team1.toString());
+      if (m.teams?.team2) activePartIds.add(m.teams.team2.toString());
+    });
+    
+    // Fetch all participations involved in ANY active match
+    const allActiveParticipations = await Participation.find({ _id: { $in: Array.from(activePartIds) } }).lean();
+    
+    // Direct Map of Participation -> Current Status (RELIABLE)
+    const partStatusMap = {};
+    activeMatches.forEach(m => {
+        if (m.teams?.team1) partStatusMap[m.teams.team1.toString()] = m.status;
+        if (m.teams?.team2) partStatusMap[m.teams.team2.toString()] = m.status;
+    });
+
+    const livePlayerIds = new Set();
+    const queuedPlayerIds = new Set();
+
+    allActiveParticipations.forEach(p => {
+      const status = partStatusMap[p._id.toString()];
+      if (status) {
+        const isMatchLive = ['Started', 'In Progress'].includes(status);
+        if (p.player1Id) {
+            const pid = p.player1Id.toString();
+            if (isMatchLive) livePlayerIds.add(pid);
+            else queuedPlayerIds.add(pid);
+        }
+        if (p.player2Id) {
+            const pid = p.player2Id.toString();
+            if (isMatchLive) livePlayerIds.add(pid);
+            else queuedPlayerIds.add(pid);
+        }
+      }
+    });
+
+    // Map: participationId -> latest updatedAt
+    const latestMatchByPart = historicalMatches.reduce((acc, m) => {
+      const t1 = m.teams?.team1?.toString();
+      const t2 = m.teams?.team2?.toString();
+      if (t1 && !acc[t1]) acc[t1] = m.updatedAt || m.createdAt;
+      if (t2 && !acc[t2]) acc[t2] = m.updatedAt || m.createdAt;
+      return acc;
+    }, {});
+
+    // Map: playerId -> latest updatedAt (max across all their participations)
+    const lastPlayedMap = {};
+    playerParticipations.forEach(p => {
+      const lastTime = latestMatchByPart[p._id.toString()];
+      if (lastTime) {
+        if (p.player1Id) {
+          const current = lastPlayedMap[p.player1Id];
+          if (!current || new Date(lastTime) > new Date(current)) lastPlayedMap[p.player1Id] = lastTime;
+        }
+        if (p.player2Id) {
+          const current = lastPlayedMap[p.player2Id];
+          if (!current || new Date(lastTime) > new Date(current)) lastPlayedMap[p.player2Id] = lastTime;
+        }
+      }
+    });
+    console.timeEnd(`[BracketView] ${categoryId} - RestTimers`);
+
     // O(N) efficient maps
     console.time(`[BracketView] ${categoryId} - Mapping`);
     const playerMap = players.reduce((acc, p) => {
-      acc[p.profileId] = { id: p.profileId, fullName: p.fullName, firstName: p.fullName.split(' ')[0] };
+      acc[p.profileId.toString()] = {
+        id: p.profileId,
+        fullName: p.fullName,
+        firstName: getSubstantialName(p.fullName),
+        lastPlayedAt: lastPlayedMap[p.profileId] || null,
+        isLive: livePlayerIds.has(p.profileId.toString()),
+        isQueued: queuedPlayerIds.has(p.profileId.toString())
+      };
       return acc;
     }, {});
     const catMap = category ? { [category.categoryId]: category.categoryName } : {};
@@ -1290,6 +1426,7 @@ const syncTournamentMatchToLiveRecord = async (tmId) => {
     matchType: (team1Ids.length > 1 || team2Ids.length > 1) ? 'Doubles' : 'Singles',
     categoryName: catMap[tm.categoryId] || tm.categoryId,
     roundName: tm.roundName || `Round ${tm.roundNumber}`,
+
     gamesPerMatch: tm.parameters?.gamesPerMatch || 3,
     pointsPerGame: tm.parameters?.pointsPerGame || 21,
     goldenPointAt: tm.parameters?.goldenPointAt || 0,
@@ -1359,7 +1496,7 @@ const enrichMatchForSpectators = async (match) => {
     acc[p.profileId] = {
       id: p.profileId,
       fullName: p.fullName,
-      firstName: p.fullName.split(' ')[0]
+      firstName: getSubstantialName(p.fullName)
     };
     return acc;
   }, {});
@@ -1484,7 +1621,7 @@ const completeTournamentMatch = async (tmId, resultData, isForfeit = false, fina
       // Real-time notification to signage and mobile
       console.log(`[completeTournamentMatch] Broadcasting update for court ${tm.courtId}. TM status: ${tm.status}`);
       await broadcastCourtUpdate(tm.courtId, tm);
-      
+
       // Critical: Signal the Umpire/Scoring app to exit or refresh
       io.to(`court_status_${tm.courtId}`).emit('court_reloaded');
     }

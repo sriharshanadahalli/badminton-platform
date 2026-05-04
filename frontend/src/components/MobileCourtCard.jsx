@@ -120,20 +120,9 @@ const MobileCourtCard = ({ courtId, viewMode }) => {
             <div className="animate-spin w-8 h-8 border-3 border-amber-500 border-t-transparent rounded-full" />
           </div>
         ) : (
-          <AnimatePresence mode="wait">
-            <motion.div
-              key={viewMode}
-              initial={{ opacity: 0, x: viewMode === 'live' ? -10 : 10 }}
-              animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: viewMode === 'live' ? 10 : -10 }}
-              transition={{ duration: 0.2 }}
-            >
-              {viewMode === 'live' ?
-                <MobileLiveScoreDisplay match={displayedLiveMatch} courtId={courtId} /> :
-                <MobileNextMatchDisplay matchConfig={nextMatch} courtId={courtId} />
-              }
-            </motion.div>
-          </AnimatePresence>
+        viewMode === 'live' ?
+          <MobileLiveScoreDisplay match={displayedLiveMatch} courtId={courtId} /> :
+          <MobileNextMatchDisplay matchConfig={nextMatch} courtId={courtId} />
         )}
       </div>
     </div>

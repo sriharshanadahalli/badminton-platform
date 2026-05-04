@@ -37,6 +37,43 @@ const getCategoryColor = (name) => {
     return CATEGORY_PALETTE[index];
 };
 
+const PlayerRestTableLabel = ({ lastPlayedAt }) => {
+    const [elapsed, setElapsed] = React.useState(null);
+
+    React.useEffect(() => {
+        if (!lastPlayedAt) return;
+        const update = () => {
+            const diff = Math.floor((Date.now() - new Date(lastPlayedAt).getTime()) / 60000);
+            setElapsed(Math.max(0, diff));
+        };
+        update();
+        const interval = setInterval(update, 60000);
+        return () => clearInterval(interval);
+    }, [lastPlayedAt]);
+
+    if (elapsed === null) return <span className="text-[10px] text-slate-700 font-bold uppercase tracking-widest italic">N/A</span>;
+
+    let colorClass = 'text-emerald-500';
+    let displayText = '>20m';
+
+    if (elapsed < 10) {
+        colorClass = 'text-rose-500 font-black animate-pulse';
+        displayText = `${elapsed}m`;
+    } else if (elapsed < 20) {
+        colorClass = 'text-amber-500 font-bold';
+        displayText = `${elapsed}m`;
+    }
+
+    return (
+        <div className="flex flex-col items-center">
+            <span className={`text-sm font-black transition-all ${colorClass}`}>
+                {displayText}
+            </span>
+            <span className="text-[8px] text-slate-600 font-bold uppercase tracking-[0.2em]">Rested</span>
+        </div>
+    );
+};
+
 const SchedulerView = () => {
     const [activeTab, setActiveTab] = useState('home'); // 'home', 'data', 'brackets'
     const [categories, setCategories] = useState([]);
@@ -220,7 +257,7 @@ const SchedulerView = () => {
                 fetch(`${CONFIG.BACKEND_URL}/api/scheduler/completed-matches`)
             ]);
             const [json1, json2] = await Promise.all([res1.json(), res2.json()]);
-            
+
             if (json1.success) setResultsData(json1.data);
             if (json2.success) setCompletedMatches(json2.data);
         } catch (err) {
@@ -295,8 +332,18 @@ const SchedulerView = () => {
         // Apply Sorting
         if (playerSort.key) {
             result.sort((a, b) => {
-                const valA = a[playerSort.key];
-                const valB = b[playerSort.key];
+                let valA = a[playerSort.key];
+                let valB = b[playerSort.key];
+
+                // Handle Date sorting for lastPlayedAt (null means infinitely rested/ready)
+                if (playerSort.key === 'lastPlayedAt') {
+                    valA = valA ? new Date(valA).getTime() : 0;
+                    valB = valB ? new Date(valB).getTime() : 0;
+                } else if (typeof valA === 'string') {
+                    valA = valA.toLowerCase();
+                    valB = valB?.toLowerCase() || '';
+                }
+
                 if (valA < valB) return playerSort.direction === 'asc' ? -1 : 1;
                 if (valA > valB) return playerSort.direction === 'asc' ? 1 : -1;
                 return 0;
@@ -538,12 +585,12 @@ const SchedulerView = () => {
                                                     </div>
                                                 </th>
                                                 <th
-                                                    onClick={() => setOverviewSort({ key: 'playersAvailable', direction: overviewSort.key === 'playersAvailable' && overviewSort.direction === 'asc' ? 'desc' : 'asc' })}
+                                                    onClick={() => setOverviewSort({ key: 'remaining', direction: overviewSort.key === 'remaining' && overviewSort.direction === 'asc' ? 'desc' : 'asc' })}
                                                     className="px-8 py-4 text-[11px] font-black text-slate-500 uppercase tracking-[0.2em] text-center cursor-pointer hover:text-amber-500 transition-colors"
                                                 >
                                                     <div className="flex items-center justify-center space-x-2">
-                                                        <span>Players Available</span>
-                                                        <ArrowUpDown className={`w-3 h-3 ${overviewSort.key === 'playersAvailable' ? 'opacity-100 text-amber-500' : 'opacity-20'}`} />
+                                                        <span>Remaining</span>
+                                                        <ArrowUpDown className={`w-3 h-3 ${overviewSort.key === 'remaining' ? 'opacity-100 text-amber-500' : 'opacity-20'}`} />
                                                     </div>
                                                 </th>
                                                 <th
@@ -553,6 +600,15 @@ const SchedulerView = () => {
                                                     <div className="flex items-center justify-center space-x-2">
                                                         <span>Ongoing</span>
                                                         <ArrowUpDown className={`w-3 h-3 ${overviewSort.key === 'ongoing' ? 'opacity-100 text-amber-500' : 'opacity-20'}`} />
+                                                    </div>
+                                                </th>
+                                                <th
+                                                    onClick={() => setOverviewSort({ key: 'playersAvailable', direction: overviewSort.key === 'playersAvailable' && overviewSort.direction === 'asc' ? 'desc' : 'asc' })}
+                                                    className="px-8 py-4 text-[11px] font-black text-slate-500 uppercase tracking-[0.2em] text-center cursor-pointer hover:text-amber-500 transition-colors"
+                                                >
+                                                    <div className="flex items-center justify-center space-x-2">
+                                                        <span>Players Available</span>
+                                                        <ArrowUpDown className={`w-3 h-3 ${overviewSort.key === 'playersAvailable' ? 'opacity-100 text-amber-500' : 'opacity-20'}`} />
                                                     </div>
                                                 </th>
                                                 <th className="px-8 py-4 text-[11px] font-black text-slate-500 uppercase tracking-[0.2em] text-right">Action</th>
@@ -576,6 +632,14 @@ const SchedulerView = () => {
                                                                 <span className="text-lg text-emerald-400 font-black tracking-tighter">{cat.completed}</span>
                                                             </td>
                                                             <td className="px-8 py-6 text-center">
+                                                                <span className="text-lg text-slate-400 font-black tracking-tighter">{cat.remaining}</span>
+                                                            </td>
+                                                            <td className="px-8 py-6 text-center">
+                                                                <span className={`text-lg font-black tracking-tighter ${cat.ongoing > 0 ? 'text-rose-500 animate-pulse' : 'text-slate-600'}`}>
+                                                                    {cat.ongoing}
+                                                                </span>
+                                                            </td>
+                                                            <td className="px-8 py-6 text-center">
                                                                 <button
                                                                     onClick={() => {
                                                                         setActiveTab('players');
@@ -585,11 +649,6 @@ const SchedulerView = () => {
                                                                 >
                                                                     {cat.playersAvailable}
                                                                 </button>
-                                                            </td>
-                                                            <td className="px-8 py-6 text-center">
-                                                                <span className={`text-lg font-black tracking-tighter ${cat.ongoing > 0 ? 'text-rose-500 animate-pulse' : 'text-slate-600'}`}>
-                                                                    {cat.ongoing}
-                                                                </span>
                                                             </td>
                                                             <td className="px-8 py-5 text-right">
                                                                 <button
@@ -627,13 +686,18 @@ const SchedulerView = () => {
                                                             </span>
                                                         </td>
                                                         <td className="px-8 py-6 text-center">
-                                                            <span className="text-xl text-amber-500 font-black">
-                                                                {summaryData.reduce((sum, c) => sum + (c.playersAvailable || 0), 0)}
+                                                            <span className="text-xl text-slate-500 font-black">
+                                                                {summaryData.reduce((sum, c) => sum + (c.remaining || 0), 0)}
                                                             </span>
                                                         </td>
                                                         <td className="px-8 py-6 text-center">
                                                             <span className="text-xl text-rose-500 font-black">
                                                                 {summaryData.reduce((sum, c) => sum + c.ongoing, 0)}
+                                                            </span>
+                                                        </td>
+                                                        <td className="px-8 py-6 text-center">
+                                                            <span className="text-xl text-amber-500 font-black">
+                                                                {summaryData.reduce((sum, c) => sum + (c.playersAvailable || 0), 0)}
                                                             </span>
                                                         </td>
                                                         <td className="px-8 py-5 text-right">
@@ -704,6 +768,12 @@ const SchedulerView = () => {
                                                         <ArrowUpDown className="w-3 h-3 opacity-30" />
                                                     </div>
                                                 </th>
+                                                <th onClick={() => setPlayerSort({ key: 'lastPlayedAt', direction: playerSort.key === 'lastPlayedAt' && playerSort.direction === 'asc' ? 'desc' : 'asc' })} className="px-8 py-4 text-[11px] font-black text-slate-500 uppercase tracking-[0.2em] text-center cursor-pointer hover:text-amber-500 transition-colors">
+                                                    <div className="flex items-center justify-center space-x-2">
+                                                        <span>Rest Time</span>
+                                                        <ArrowUpDown className="w-3 h-3 opacity-30" />
+                                                    </div>
+                                                </th>
                                                 <th className="px-8 py-4 text-[11px] font-black text-slate-500 uppercase tracking-[0.2em] text-right">Status</th>
                                             </tr>
                                         </thead>
@@ -739,6 +809,9 @@ const SchedulerView = () => {
                                                                 <span className="text-lg font-black text-white">{entry.matchesPlayed}</span>
                                                                 <span className="text-[8px] text-slate-600 font-bold uppercase tracking-[0.2em]">Total</span>
                                                             </div>
+                                                        </td>
+                                                        <td className="px-8 py-5 text-center">
+                                                            <PlayerRestTableLabel lastPlayedAt={entry.lastPlayedAt} />
                                                         </td>
                                                         <td className="px-8 py-5 text-right">
                                                             <div className="flex flex-col items-end">
@@ -895,7 +968,7 @@ const SchedulerView = () => {
                                     <div className="flex items-center justify-end space-x-4 min-w-[320px]">
                                         <div className="relative group flex-1">
                                             <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500 group-focus-within:text-amber-500 transition-colors" />
-                                            <input 
+                                            <input
                                                 type="text"
                                                 placeholder="Search registry records..."
                                                 value={dataSearch}
@@ -1049,9 +1122,9 @@ const SchedulerView = () => {
                         </motion.div>
                     )}
                 </AnimatePresence>
-                <ImportDataModal 
-                    isOpen={isImportModalOpen} 
-                    onClose={() => setIsImportModalOpen(false)} 
+                <ImportDataModal
+                    isOpen={isImportModalOpen}
+                    onClose={() => setIsImportModalOpen(false)}
                     onUpload={(e, type) => {
                         handleFileUpload(e, type);
                         // Optional: Keep open or close? User usually wants to upload one after another.
@@ -1463,9 +1536,6 @@ const BracketLayer = ({ matches, onUpdate, catId, onEdit, onForfeit, highlighted
 };
 
 const CourtSlot = ({ match, type, isLive }) => {
-    const hasPlayers = match?.teams?.team1?.players?.length > 0 || match?.teams?.team2?.players?.length > 0;
-    const team1Name = match?.teams?.team1?.players?.map(p => p.firstName || p.fullName.split(' ')[0]).join('/') || 'TBD';
-    const team2Name = match?.teams?.team2?.players?.map(p => p.firstName || p.fullName.split(' ')[0]).join('/') || 'TBD';
     const slotLabel = type === 'Active' ? 'S1' : 'S2';
 
     return (
@@ -1478,24 +1548,12 @@ const CourtSlot = ({ match, type, isLive }) => {
             </div>
 
             <div className="flex-1 min-w-0 flex flex-col justify-center">
-                {match && hasPlayers ? (
-                    <>
-                        <div className="flex items-center justify-between mb-0.5">
-                            <span className="text-[9px] font-black text-amber-500 truncate tracking-tight leading-none uppercase italic">{team1Name} vs {team2Name}</span>
-                        </div>
-                        <div className="flex items-center space-x-2">
-                            <span className="text-[7px] text-slate-500 font-black uppercase tracking-widest leading-none">#{(match.matchIndex || 0) + 1}</span>
-                            {isLive && <span className="w-1 h-1 rounded-full bg-rose-500 animate-ping" />}
-                        </div>
-                    </>
-                ) : (
-                    <div className="flex items-center justify-between">
-                        <span className={`text-[9px] font-black uppercase tracking-[0.2em] leading-none ${match ? 'text-rose-500/60' : 'text-emerald-500/60'}`}>
-                            {match ? 'Occupied' : 'Available'}
-                        </span>
-                        {match && !hasPlayers && <span className="text-[7px] text-slate-600 font-bold italic uppercase tracking-tighter">Waiting</span>}
-                    </div>
-                )}
+                <div className="flex items-center justify-between">
+                    <span className={`text-[9px] font-black uppercase tracking-[0.2em] leading-none ${match ? 'text-rose-500/60' : 'text-emerald-500/60'}`}>
+                        {match ? 'Occupied' : 'Available'}
+                    </span>
+                    {match && isLive && <span className="w-1 h-1 rounded-full bg-rose-500 animate-ping" />}
+                </div>
             </div>
         </div>
     );
@@ -1654,10 +1712,10 @@ const DataTable = ({ data, search, setSearch }) => {
                 <div className="flex items-center space-x-4 w-full md:w-auto">
                     <button
                         onClick={downloadCSV}
-                        className="flex items-center space-x-2 bg-white/5 hover:bg-white/10 text-white px-4 py-2 rounded-xl border border-white/10 transition-all text-[10px] font-black uppercase tracking-widest"
+                        className="flex items-center space-x-2 bg-emerald-600/10 hover:bg-emerald-600/20 text-emerald-500 border border-emerald-500/20 px-6 py-3 rounded-xl transition-all uppercase tracking-widest text-[10px] font-black shrink-0 shadow-lg shadow-emerald-500/5"
                     >
-                        <FileSpreadsheet className="w-4 h-4 text-emerald-500" />
-                        <span>Download CSV</span>
+                        <FileSpreadsheet className="w-4 h-4" />
+                        <span>Export CSV</span>
                     </button>
                     <div className="relative flex-1 md:w-64 group">
                         <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500 group-focus-within:text-amber-500 transition-colors" />
@@ -1719,7 +1777,7 @@ const ResultsView = ({ data, completedMatches, loading }) => {
     const [subTab, setSubTab] = useState('matches'); // 'standings' or 'matches'
     const [search, setSearch] = useState('');
 
-    const filteredStandings = data.filter(row => 
+    const filteredStandings = data.filter(row =>
         row.categoryName?.toLowerCase().includes(search.toLowerCase()) ||
         row.winner?.toLowerCase().includes(search.toLowerCase()) ||
         row.runnerUp?.toLowerCase().includes(search.toLowerCase())
@@ -1737,7 +1795,7 @@ const ResultsView = ({ data, completedMatches, loading }) => {
 
     const handleExportCSV = () => {
         const sourceData = subTab === 'standings' ? filteredStandings : filteredMatches;
-        const csvData = subTab === 'standings' 
+        const csvData = subTab === 'standings'
             ? sourceData.map((row, idx) => ({
                 'S.No': idx + 1,
                 'Category': row.categoryName,
@@ -1794,13 +1852,13 @@ const ResultsView = ({ data, completedMatches, loading }) => {
 
                     {/* Middle: Sub-Tabs */}
                     <div className="flex items-center space-x-2 bg-slate-950/60 p-1.5 rounded-2xl border border-white/5 shadow-inner">
-                        <button 
+                        <button
                             onClick={() => setSubTab('standings')}
                             className={`px-6 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all duration-300 ${subTab === 'standings' ? 'bg-amber-500 text-slate-900 shadow-lg shadow-amber-500/20' : 'text-slate-500 hover:text-white hover:bg-white/5'}`}
                         >
                             Category Winners
                         </button>
-                        <button 
+                        <button
                             onClick={() => setSubTab('matches')}
                             className={`px-6 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all duration-300 ${subTab === 'matches' ? 'bg-amber-500 text-slate-900 shadow-lg shadow-amber-500/20' : 'text-slate-500 hover:text-white hover:bg-white/5'}`}
                         >
@@ -1812,7 +1870,7 @@ const ResultsView = ({ data, completedMatches, loading }) => {
                     <div className="flex items-center justify-end space-x-4 min-w-[400px]">
                         <div className="relative group flex-1">
                             <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500 group-focus-within:text-amber-500 transition-colors" />
-                            <input 
+                            <input
                                 type="text"
                                 placeholder={`Search ${subTab === 'standings' ? 'winners' : 'ledger'}...`}
                                 value={search}
@@ -1820,7 +1878,7 @@ const ResultsView = ({ data, completedMatches, loading }) => {
                                 className="bg-slate-950/40 border border-white/5 rounded-xl py-3 pl-12 pr-6 text-xs text-white placeholder:text-slate-600 focus:outline-none focus:border-amber-500/50 focus:ring-4 focus:ring-amber-500/5 w-full transition-all"
                             />
                         </div>
-                        
+
                         <button
                             onClick={handleExportCSV}
                             className="flex items-center space-x-2 bg-emerald-600/10 hover:bg-emerald-600/20 text-emerald-500 border border-emerald-500/20 px-6 py-3 rounded-xl transition-all uppercase tracking-widest text-[10px] font-black shrink-0 shadow-lg shadow-emerald-500/5"
@@ -1898,7 +1956,7 @@ const ResultsView = ({ data, completedMatches, loading }) => {
                                         const winnerName = m.winner === 'team1' ? team1 : team2;
                                         const loserName = m.winner === 'team1' ? team2 : team1;
                                         const isForfeit = m.status === 'Forfeited';
-                                        
+
                                         const gameWins1 = m.games?.filter(g => g.status === 'Completed' && g.scores?.team1 > g.scores?.team2).length || 0;
                                         const gameWins2 = m.games?.filter(g => g.status === 'Completed' && g.scores?.team2 > g.scores?.team1).length || 0;
                                         const gameScoreStr = m.winner === 'team1' ? `${gameWins1} - ${gameWins2}` : `${gameWins2} - ${gameWins1}`;
@@ -1932,7 +1990,7 @@ const ResultsView = ({ data, completedMatches, loading }) => {
                                                                 {m.games?.map((g, gi) => {
                                                                     const t1Wins = g.scores?.team1 > g.scores?.team2;
                                                                     const displayWinnerSide = m.winner === 'team1';
-                                                                    
+
                                                                     // We want to highlight the winner of THIS game
                                                                     const s1 = displayWinnerSide ? g.scores?.team1 : g.scores?.team2;
                                                                     const s2 = displayWinnerSide ? g.scores?.team2 : g.scores?.team1;
@@ -2117,7 +2175,7 @@ const ImportDataModal = ({ isOpen, onClose, onUpload }) => {
                             <p className="text-slate-500 text-[10px] font-bold uppercase tracking-widest mt-1">Upload CSV files to synchronize records</p>
                         </div>
                     </div>
-                    <button 
+                    <button
                         onClick={onClose}
                         className="px-6 py-2.5 rounded-xl bg-white/5 hover:bg-white/10 text-white text-[10px] font-black uppercase tracking-widest transition-all"
                     >
@@ -2126,26 +2184,26 @@ const ImportDataModal = ({ isOpen, onClose, onUpload }) => {
                 </div>
 
                 <div className="p-10 grid grid-cols-1 md:grid-cols-3 gap-8">
-                    <UploadSection 
-                        title="Match Categories" 
-                        description="Upload ID & Category Mapping" 
-                        onUpload={(e) => { onUpload(e, 'categories'); }} 
-                        color="blue" 
+                    <UploadSection
+                        title="Match Categories"
+                        description="Upload ID & Category Mapping"
+                        onUpload={(e) => { onUpload(e, 'categories'); }}
+                        color="blue"
                     />
-                    <UploadSection 
-                        title="Player Profiles" 
-                        description="Upload Profile IDs & Names" 
-                        onUpload={(e) => { onUpload(e, 'players'); }} 
-                        color="purple" 
+                    <UploadSection
+                        title="Player Profiles"
+                        description="Upload Profile IDs & Names"
+                        onUpload={(e) => { onUpload(e, 'players'); }}
+                        color="purple"
                     />
-                    <UploadSection 
-                        title="Match Participation" 
-                        description="Link Categories & Team Members" 
-                        onUpload={(e) => { onUpload(e, 'participation'); }} 
-                        color="emerald" 
+                    <UploadSection
+                        title="Match Participation"
+                        description="Link Categories & Team Members"
+                        onUpload={(e) => { onUpload(e, 'participation'); }}
+                        color="emerald"
                     />
                 </div>
-                
+
                 <div className="p-8 bg-slate-950/20 border-t border-white/5 text-center">
                     <p className="text-[10px] text-slate-600 font-bold uppercase tracking-[0.2em]">Ensure your CSV headers match the required tournament schema</p>
                 </div>

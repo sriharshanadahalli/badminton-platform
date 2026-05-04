@@ -28,17 +28,10 @@ const RoundRobinSetupModal = ({ isOpen, onClose, onGenerate }) => {
 
     const fetchPlayers = async () => {
         try {
-            const res = await fetch(`${CONFIG.BACKEND_URL}/api/scheduler/view`);
+            const res = await fetch(`${CONFIG.BACKEND_URL}/api/scheduler/all-players`);
             const json = await res.json();
             if (json.success) {
-                // Extract unique players from profiles
-                const players = json.data.reduce((acc, item) => {
-                    if (item.player1) acc.add(JSON.stringify({ id: item.raw.player1Id, name: item.player1 }));
-                    if (item.player2) acc.add(JSON.stringify({ id: item.raw.player2Id, name: item.player2 }));
-                    return acc;
-                }, new Set());
-                
-                setAllPlayers(Array.from(players).map(s => JSON.parse(s)).sort((a, b) => a.name.localeCompare(b.name)));
+                setAllPlayers(json.data);
             }
         } catch (err) { console.error(err); }
     };

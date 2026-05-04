@@ -29,6 +29,68 @@ const MatchStatusBadge = ({ status }) => {
     );
 };
 
+const PlayerRestDot = ({ lastPlayedAt, isLive, isQueued }) => {
+    const [elapsed, setElapsed] = React.useState(null);
+
+    React.useEffect(() => {
+        if (!lastPlayedAt) {
+            setElapsed(null);
+            return;
+        }
+        const update = () => {
+            const diff = Math.floor((Date.now() - new Date(lastPlayedAt).getTime()) / 60000);
+            setElapsed(Math.max(0, diff));
+        };
+        update();
+        const interval = setInterval(update, 60000);
+        return () => clearInterval(interval);
+    }, [lastPlayedAt]);
+
+    // Priority 1: Live Status (Pulsing Red)
+    if (isLive) {
+        return (
+            <div
+                title="Live: Playing right now"
+                className="w-2.5 h-2.5 rounded-full mr-2 shrink-0 bg-rose-600 animate-pulse shadow-[0_0_10px_rgba(225,29,72,0.6)] border border-white/20"
+            />
+        );
+    }
+
+    // Priority 2: Queued Status (Solid Amber)
+    if (isQueued) {
+        return (
+            <div
+                title="Queued: Waiting for match to start"
+                className="w-2.5 h-2.5 rounded-full mr-2 shrink-0 bg-amber-500 shadow-[0_0_10px_rgba(245,158,11,0.5)] border border-white/20"
+            />
+        );
+    }
+
+    // Priority 3: Never Played (Solid Green)
+    if (!lastPlayedAt) {
+        return (
+            <div
+                title="Fresh: Ready to play"
+                className="w-2 h-2 rounded-full mr-2 shrink-0 bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.4)]"
+            />
+        );
+    }
+
+    // Priority 4: Resting Logic
+    let colorClass = 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.4)]';
+    if (elapsed !== null) {
+        if (elapsed < 10) colorClass = 'bg-rose-500 animate-pulse shadow-[0_0_10px_rgba(244,63,94,0.6)]';
+        else if (elapsed < 20) colorClass = 'bg-amber-500 shadow-[0_0_8px_rgba(245,158,11,0.5)]';
+    }
+
+    return (
+        <div
+            title={`Rested for ${elapsed}m`}
+            className={`w-2 h-2 rounded-full mr-2 shrink-0 ${colorClass}`}
+        />
+    );
+};
+
 const BracketCard = ({ match, onEdit, onUpdate, onForfeit, isHighlighted, setGlobalError }) => {
     const isBye = match.status === 'BYE';
     const isSettingsLocked = ['Completed', 'Forfeited', 'In Progress'].includes(match.status);
@@ -63,33 +125,39 @@ const BracketCard = ({ match, onEdit, onUpdate, onForfeit, isHighlighted, setGlo
         } catch (err) { console.error('Start match error:', err); }
     };
 
-    const renderPlayers = (name, isWinner, isLoser) => {
-        const isSpecial = !name || name === 'TBD' || name === 'BYE' || name === 'Unknown Team';
+    const renderPlayers = (players, isWinner, isLoser) => {
+        const hasPlayers = players && players.length > 0;
 
-        if (isSpecial) {
+        if (!hasPlayers) {
             return (
                 <div className="flex flex-col items-center justify-center h-[40px]">
                     <div className="text-slate-600 italic opacity-60 uppercase tracking-widest text-[10px] font-bold py-1 px-4 bg-slate-800/20 rounded-lg">
-                        {name || 'TBD'}
+                        TBD
                     </div>
                 </div>
             );
         }
 
-        const parts = name.split(' / ');
-        const p1 = parts[0];
-        const p2 = parts[1]; // undefined for singles
+        const p1 = players[0];
+        const p2 = players[1]; // undefined for singles
 
-        const colorClass = isWinner ? 'text-emerald-400 font-bold' : isLoser ? 'text-slate-400 grayscale' : 'text-slate-100 font-medium'; // LIGHTER WEIGHT FOR DEFAULT STATE
+        const colorClass = isWinner ? 'text-emerald-400 font-bold' : isLoser ? 'text-slate-500 font-medium' : 'text-slate-100 font-medium';
 
         return (
-            <div className="flex flex-col items-center justify-center h-[40px] space-y-1">
-                <div className={`text-xs truncate uppercase tracking-tight leading-tight h-4 flex items-center transition-all duration-700 ${colorClass}`}>
-                    {p1}
+            <div className="flex flex-col items-center justify-center h-[40px] space-y-1 w-full">
+                <div className={`text-xs uppercase tracking-tight leading-tight h-4 flex items-center transition-all duration-700 w-full justify-center ${colorClass}`}>
+                    <PlayerRestDot lastPlayedAt={p1.lastPlayedAt} isLive={p1.isLive} isQueued={p1.isQueued} />
+                    <span className="whitespace-nowrap">{p1.fullName}</span>
                 </div>
-                {/* Always render second slot, even if empty, for Singles/Doubles parity */}
-                <div className={`text-xs truncate uppercase tracking-tight leading-tight h-4 flex items-center transition-all duration-700 ${colorClass}`}>
-                    {p2 || <span className="opacity-0">Placeholder</span>}
+                <div className={`text-xs uppercase tracking-tight leading-tight h-4 flex items-center transition-all duration-700 w-full justify-center ${colorClass}`}>
+                    {p2 ? (
+                        <>
+                            <PlayerRestDot lastPlayedAt={p2.lastPlayedAt} isLive={p2.isLive} isQueued={p2.isQueued} />
+                            <span className="whitespace-nowrap">{p2.fullName}</span>
+                        </>
+                    ) : (
+                        <span className="opacity-0">Placeholder</span>
+                    )}
                 </div>
             </div>
         );
@@ -139,14 +207,14 @@ const BracketCard = ({ match, onEdit, onUpdate, onForfeit, isHighlighted, setGlo
                     <MatchStatusBadge status={match.status} />
                 </div>
             </div>
-            <div className="flex-1 bg-slate-800/10 px-6 py-1 flex flex-col items-center text-center space-y-1.5 justify-center relative overflow-hidden">
-                <div className="">{renderPlayers(match.teams?.team1?.players?.map(p => p.fullName).join(' / ') || 'TBD', match.winner === 'team1', match.winner === 'team2')}</div>
+            <div className="flex-1 bg-slate-800/10 px-3 py-1 flex flex-col items-center text-center space-y-1.5 justify-center relative overflow-hidden">
+                <div className="">{renderPlayers(match.teams?.team1?.players, match.winner === 'team1', match.winner === 'team2')}</div>
                 <div className="flex items-center space-x-4 w-full opacity-10">
                     <div className="h-[1px] flex-1 bg-gradient-to-r from-transparent to-slate-500" />
                     <span className="text-[8px] font-black text-slate-400 uppercase tracking-widest">vs</span>
                     <div className="h-[1px] flex-1 bg-gradient-to-l from-transparent to-slate-500" />
                 </div>
-                <div className="">{renderPlayers(match.teams?.team2?.players?.map(p => p.fullName).join(' / ') || 'TBD', match.winner === 'team2', match.winner === 'team1')}</div>
+                <div className="">{renderPlayers(match.teams?.team2?.players, match.winner === 'team2', match.winner === 'team1')}</div>
             </div>
             <div className="bg-slate-800/40 px-6 flex items-center border-t border-white/5 relative h-[48px] shrink-0 rounded-b-[1.5rem]">
                 {/* Left Section: Play Button - flex-1 pushes center */}
